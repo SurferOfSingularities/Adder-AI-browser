@@ -37,17 +37,21 @@ actual fun PlatformWebView(
                 onStart = { pageUrl ->
                     state.isModelBusy = false
                     onPageStarted(pageUrl)
-                    // Inject early CSS
-                    webView.evaluateJavaScript(EarlyCssInjector.earlyHideCss, null)
+                    // Inject early CSS only when blocking is enabled
+                    if (state.blockingEnabled) {
+                        webView.evaluateJavaScript(EarlyCssInjector.earlyHideCss, null)
+                    }
                 },
                 onFinish = { pageUrl ->
                     onPageFinished(pageUrl)
                     state.canGoBack = webView.canGoBack
                     state.canGoForward = webView.canGoForward
 
-                    // Run ad blocking pipeline
-                    scope.launch {
-                        runIosAdBlockPipeline(webView, adBlockEngine, pageUrl, state)
+                    // Run ad blocking pipeline only when blocking is enabled
+                    if (state.blockingEnabled) {
+                        scope.launch {
+                            runIosAdBlockPipeline(webView, adBlockEngine, pageUrl, state)
+                        }
                     }
                 }
             )

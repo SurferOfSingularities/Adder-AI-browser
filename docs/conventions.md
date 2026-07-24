@@ -27,6 +27,14 @@
 - **JavaScript injection code:** Stored as string constants in the shared module for reuse across platforms.
 - **Navigation:** Not needed for MVP (single screen app). If needed later, use Compose Navigation.
 
+## Compose Previews
+
+- **Every previewable composable must have at least one `@Preview` function.** Use the multiplatform annotation `org.jetbrains.compose.ui.tooling.preview.Preview` (from `compose.components.uiToolingPreview`), not the Android-only one.
+- Preview functions are `private`, live in the same file as the composable, and wrap the content in `MaterialTheme { }` so theme colors resolve.
+- Cover meaningful states. For stateful/toggleable UI, add a preview per key state (e.g. enabled/disabled, on/off).
+- Pass static/fake data to preview functions — no live data, network, or platform calls.
+- **Exception:** composables that embed the platform WebView (`PlatformWebView`, and screens that host it like `BrowserScreen`/`App`) cannot be previewed because the `expect`/`actual` WebView needs a live native view. Keep UI logic in small, previewable composables so most of the UI stays covered.
+
 ## iOS Interop
 
 - iOS app uses `ComposeUIViewController` from Compose Multiplatform to render the shared Compose UI.

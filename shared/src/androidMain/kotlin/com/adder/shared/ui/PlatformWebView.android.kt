@@ -57,8 +57,10 @@ actual fun PlatformWebView(
                         pipelineJob?.cancel()
                         state.isModelBusy = false
                         pageUrl?.let { onPageStarted(it) }
-                        // Inject early CSS
-                        view?.evaluateJavascript(EarlyCssInjector.earlyHideCss, null)
+                        // Inject early CSS only when blocking is enabled
+                        if (state.blockingEnabled) {
+                            view?.evaluateJavascript(EarlyCssInjector.earlyHideCss, null)
+                        }
                     }
 
                     override fun onPageFinished(view: WebView?, pageUrl: String?) {
@@ -67,10 +69,12 @@ actual fun PlatformWebView(
                         state.canGoBack = view?.canGoBack() ?: false
                         state.canGoForward = view?.canGoForward() ?: false
 
-                        // Run ad blocking pipeline
-                        view?.let { wv ->
-                            pipelineJob = scope.launch {
-                                runAdBlockPipeline(wv, adBlockEngine, pageUrl ?: "", state)
+                        // Run ad blocking pipeline only when blocking is enabled
+                        if (state.blockingEnabled) {
+                            view?.let { wv ->
+                                pipelineJob = scope.launch {
+                                    runAdBlockPipeline(wv, adBlockEngine, pageUrl ?: "", state)
+                                }
                             }
                         }
                     }

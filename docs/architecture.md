@@ -16,6 +16,21 @@ Pages load and render normally first. Ad removal happens after page load complet
 - Works reliably with platform WebViews
 - Trades a brief "flash of ad content" for implementation simplicity (optimized later with early CSS injection)
 
+## Ad-Blocking Toggle (Virgin View)
+
+Users can switch between the ad-blocked view and the original ("virgin") view of a page via a floating pill button (bottom-center, fixed while the page scrolls).
+
+Because ad removal is **destructive** (ad nodes are removed from the DOM, and a MutationObserver keeps removing dynamically-added ones), the toggle cannot simply reveal already-removed elements. Instead it uses a **reload-based bypass**:
+
+- `WebViewState.blockingEnabled` (default `true`) is the single source of truth. It lives in the remembered `WebViewState`, so the choice **persists across navigation for the session**.
+- `WebViewState.toggleBlocking()` flips the flag and reloads the current page.
+- Both platform WebViews read `state.blockingEnabled` on each page load:
+  - **Blocking on:** inject early-hide CSS and run the ad-block pipeline (existing behavior).
+  - **Blocking off (virgin):** skip both the early CSS injection and the pipeline, so the page loads completely untouched.
+- The pill is disabled while the page is loading or the model is busy, to avoid mid-pipeline reloads.
+
+This keeps the destructive removal strategy intact while giving a clean on/off switch at the cost of a reload per toggle.
+
 ## Shared Module Ownership
 
 The shared KMP module owns ALL business logic AND the UI layer via Compose Multiplatform:
