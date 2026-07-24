@@ -4,11 +4,11 @@ object UrlUtils {
     /**
      * Normalizes user input into a valid URL.
      * - Adds "https://" if no scheme is present
-     * - If input looks like a search query (no dots, has spaces), returns null
+     * - If input looks like a search query (no dots, has spaces), returns a Google search URL
      */
-    fun normalizeUrl(input: String): String? {
+    fun normalizeUrl(input: String): String {
         val trimmed = input.trim()
-        if (trimmed.isEmpty()) return null
+        if (trimmed.isEmpty()) return "https://www.google.com"
 
         // Already has a scheme
         if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
@@ -20,7 +20,7 @@ object UrlUtils {
             return "https://$trimmed"
         }
 
-        // Doesn't look like a URL — could be treated as a search query in future
-        return null
+        // Treat as a search query
+        return "https://www.google.com/search?q=${trimmed.replace(" ", "+")}"
     }
 }

@@ -19,8 +19,8 @@ import com.adder.shared.UrlUtils
  */
 @Composable
 fun BrowserScreen() {
-    var url by remember { mutableStateOf("https://www.example.com") }
-    var inputText by remember { mutableStateOf("https://www.example.com") }
+    var url by remember { mutableStateOf("https://www.google.com") }
+    var inputText by remember { mutableStateOf("https://www.google.com") }
     var canGoBack by remember { mutableStateOf(false) }
     var canGoForward by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
@@ -28,49 +28,69 @@ fun BrowserScreen() {
     // WebView controller for navigation commands
     val webViewState = remember { WebViewState() }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Toolbar
-        BrowserToolbar(
-            inputText = inputText,
-            canGoBack = canGoBack,
-            canGoForward = canGoForward,
-            onInputChange = { inputText = it },
-            onNavigate = {
-                val normalized = UrlUtils.normalizeUrl(inputText)
-                if (normalized != null) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Toolbar
+            BrowserToolbar(
+                inputText = inputText,
+                canGoBack = canGoBack,
+                canGoForward = canGoForward,
+                onInputChange = { inputText = it },
+                onNavigate = {
+                    val normalized = UrlUtils.normalizeUrl(inputText)
                     url = normalized
                     inputText = normalized
                     webViewState.loadUrl(normalized)
-                }
-            },
-            onBack = { webViewState.goBack() },
-            onForward = { webViewState.goForward() },
-            onRefresh = { webViewState.reload() }
-        )
+                },
+                onBack = { webViewState.goBack() },
+                onForward = { webViewState.goForward() },
+                onRefresh = { webViewState.reload() }
+            )
 
-        // Loading indicator
-        if (isLoading) {
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().height(3.dp)
+            // Loading indicator (for page load)
+            if (isLoading) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(3.dp)
+                )
+            }
+
+            // Platform WebView
+            PlatformWebView(
+                url = url,
+                state = webViewState,
+                modifier = Modifier.fillMaxSize().weight(1f),
+                onPageStarted = { newUrl ->
+                    isLoading = true
+                    inputText = newUrl
+                },
+                onPageFinished = { newUrl ->
+                    isLoading = false
+                    inputText = newUrl
+                    canGoBack = webViewState.canGoBack
+                    canGoForward = webViewState.canGoForward
+                }
             )
         }
 
-        // Platform WebView
-        PlatformWebView(
-            url = url,
-            state = webViewState,
-            modifier = Modifier.fillMaxSize().weight(1f),
-            onPageStarted = { newUrl ->
-                isLoading = true
-                inputText = newUrl
-            },
-            onPageFinished = { newUrl ->
-                isLoading = false
-                inputText = newUrl
-                canGoBack = webViewState.canGoBack
-                canGoForward = webViewState.canGoForward
+        // Model Inference Spinner
+        if (webViewState.isModelBusy) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.3f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Analyzing for ads...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             }
-        )
+        }
     }
 }
 

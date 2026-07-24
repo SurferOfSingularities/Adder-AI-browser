@@ -55,6 +55,7 @@ actual fun PlatformWebView(
                     override fun onPageStarted(view: WebView?, pageUrl: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, pageUrl, favicon)
                         pipelineJob?.cancel()
+                        state.isModelBusy = false
                         pageUrl?.let { onPageStarted(it) }
                         // Inject early CSS
                         view?.evaluateJavascript(EarlyCssInjector.earlyHideCss, null)
@@ -69,7 +70,7 @@ actual fun PlatformWebView(
                         // Run ad blocking pipeline
                         view?.let { wv ->
                             pipelineJob = scope.launch {
-                                runAdBlockPipeline(wv, adBlockEngine, pageUrl ?: "")
+                                runAdBlockPipeline(wv, adBlockEngine, pageUrl ?: "", state)
                             }
                         }
                     }
@@ -95,20 +96,26 @@ actual fun PlatformWebView(
 private suspend fun runAdBlockPipeline(
     webView: WebView,
     engine: AdBlockEngine,
-    pageUrl: String
+    pageUrl: String,
+    state: WebViewState
 ) {
     try {
+        state.isModelBusy = true
         // Extract DOM elements
         val jsonResult = evaluateJsAsync(webView, DomExtractor.extractionScript)
         val elements = parseExtractedElements(unescapeJsString(jsonResult))
         Log.d(TAG, "Extracted ${elements.size} candidate elements")
 
-        if (elements.isEmpty()) return
+        if (elements.isEmpty()) {
+            state.isModelBusy = false
+            return
+        }
 
         // Run pipeline
         val result = engine.runPipeline(elements, pageUrl)
         if (result.skipped || result.selectorsToRemove.isEmpty()) {
             Log.d(TAG, if (result.skipped) "Whitelisted" else "No ads found")
+            state.isModelBusy = false
             return
         }
 
@@ -123,6 +130,8 @@ private suspend fun runAdBlockPipeline(
         evaluateJsAsync(webView, observerScript)
     } catch (e: Exception) {
         Log.e(TAG, "Pipeline error", e)
+    } finally {
+        state.isModelBusy = false
     }
 }
 

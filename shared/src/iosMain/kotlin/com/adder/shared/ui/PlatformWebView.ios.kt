@@ -35,6 +35,7 @@ actual fun PlatformWebView(
 
             val navigationDelegate = WebViewNavigationDelegate(
                 onStart = { pageUrl ->
+                    state.isModelBusy = false
                     onPageStarted(pageUrl)
                     // Inject early CSS
                     webView.evaluateJavaScript(EarlyCssInjector.earlyHideCss, null)
@@ -46,7 +47,7 @@ actual fun PlatformWebView(
 
                     // Run ad blocking pipeline
                     scope.launch {
-                        runIosAdBlockPipeline(webView, adBlockEngine, pageUrl)
+                        runIosAdBlockPipeline(webView, adBlockEngine, pageUrl, state)
                     }
                 }
             )
@@ -77,18 +78,26 @@ actual fun PlatformWebView(
 private suspend fun runIosAdBlockPipeline(
     webView: WKWebView,
     engine: AdBlockEngine,
-    pageUrl: String
+    pageUrl: String,
+    state: WebViewState
 ) {
     try {
+        state.isModelBusy = true
         // Extract DOM elements
         val jsonResult = evaluateJsAsyncIos(webView, DomExtractor.extractionScript)
         val elements = parseExtractedElements(jsonResult)
 
-        if (elements.isEmpty()) return
+        if (elements.isEmpty()) {
+            state.isModelBusy = false
+            return
+        }
 
         // Run pipeline
         val result = engine.runPipeline(elements, pageUrl)
-        if (result.skipped || result.selectorsToRemove.isEmpty()) return
+        if (result.skipped || result.selectorsToRemove.isEmpty()) {
+            state.isModelBusy = false
+            return
+        }
 
         // Remove ads
         val removalScript = DomRemover.buildRemovalScript(result.selectorsToRemove)
@@ -99,6 +108,8 @@ private suspend fun runIosAdBlockPipeline(
         evaluateJsAsyncIos(webView, observerScript)
     } catch (e: Exception) {
         println("[PlatformWebView] Pipeline error: ${e.message}")
+    } finally {
+        state.isModelBusy = false
     }
 }
 

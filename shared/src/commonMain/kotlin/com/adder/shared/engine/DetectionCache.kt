@@ -1,5 +1,7 @@
 package com.adder.shared.engine
 
+import kotlinx.datetime.Clock
+
 /**
  * Simple in-memory LRU cache for ad detection results.
  * Caches which selectors were identified as ads on a per-domain basis,
@@ -58,7 +60,7 @@ class DetectionCache(private val maxSize: Int = 50) {
     }
 
     private fun currentTimeMillis(): Long {
-        return kotlin.system.getTimeMillis()
+        return Clock.System.now().toEpochMilliseconds()
     }
 
     companion object {
