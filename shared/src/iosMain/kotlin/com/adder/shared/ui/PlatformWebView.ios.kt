@@ -20,13 +20,19 @@ import platform.darwin.NSObject
 @Composable
 actual fun PlatformWebView(
     url: String,
-    state: WebViewState,
+    controller: WebViewController,
+    blockingEnabled: Boolean,
     modifier: Modifier,
     onPageStarted: (url: String) -> Unit,
-    onPageFinished: (url: String) -> Unit
+    onPageFinished: (url: String) -> Unit,
+    onNavStateChanged: (canGoBack: Boolean, canGoForward: Boolean) -> Unit,
+    onModelBusyChanged: (busy: Boolean) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val adBlockEngine = remember { AdBlockEngine(LlmClassifier()) }
+    // Read the latest toggle value inside the WebView's long-lived callbacks
+    // (the factory closure would otherwise capture a stale value).
+    val currentBlockingEnabled by rememberUpdatedState(blockingEnabled)
 
     UIKitView(
         factory = {
@@ -35,22 +41,20 @@ actual fun PlatformWebView(
 
             val navigationDelegate = WebViewNavigationDelegate(
                 onStart = { pageUrl ->
-                    state.isModelBusy = false
                     onPageStarted(pageUrl)
                     // Inject early CSS only when blocking is enabled
-                    if (state.blockingEnabled) {
+                    if (currentBlockingEnabled) {
                         webView.evaluateJavaScript(EarlyCssInjector.earlyHideCss, null)
                     }
                 },
                 onFinish = { pageUrl ->
                     onPageFinished(pageUrl)
-                    state.canGoBack = webView.canGoBack
-                    state.canGoForward = webView.canGoForward
+                    onNavStateChanged(webView.canGoBack, webView.canGoForward)
 
                     // Run ad blocking pipeline only when blocking is enabled
-                    if (state.blockingEnabled) {
+                    if (currentBlockingEnabled) {
                         scope.launch {
-                            runIosAdBlockPipeline(webView, adBlockEngine, pageUrl, state)
+                            runIosAdBlockPipeline(webView, adBlockEngine, pageUrl, onModelBusyChanged)
                         }
                     }
                 }
@@ -58,15 +62,15 @@ actual fun PlatformWebView(
             webView.navigationDelegate = navigationDelegate
             webView.allowsBackForwardNavigationGestures = true
 
-            // Wire state commands
-            state.onLoadUrl = { newUrl ->
+            // Wire imperative commands to the controller
+            controller.onLoadUrl = { newUrl ->
                 NSURL.URLWithString(newUrl)?.let { nsUrl ->
                     webView.loadRequest(NSURLRequest.requestWithURL(nsUrl))
                 }
             }
-            state.onGoBack = { webView.goBack() }
-            state.onGoForward = { webView.goForward() }
-            state.onReload = { webView.reload() }
+            controller.onGoBack = { webView.goBack() }
+            controller.onGoForward = { webView.goForward() }
+            controller.onReload = { webView.reload() }
 
             // Load initial URL
             NSURL.URLWithString(url)?.let { nsUrl ->
@@ -83,23 +87,23 @@ private suspend fun runIosAdBlockPipeline(
     webView: WKWebView,
     engine: AdBlockEngine,
     pageUrl: String,
-    state: WebViewState
+    onModelBusyChanged: (Boolean) -> Unit
 ) {
     try {
-        state.isModelBusy = true
+        onModelBusyChanged(true)
         // Extract DOM elements
         val jsonResult = evaluateJsAsyncIos(webView, DomExtractor.extractionScript)
         val elements = parseExtractedElements(jsonResult)
 
         if (elements.isEmpty()) {
-            state.isModelBusy = false
+            onModelBusyChanged(false)
             return
         }
 
         // Run pipeline
         val result = engine.runPipeline(elements, pageUrl)
         if (result.skipped || result.selectorsToRemove.isEmpty()) {
-            state.isModelBusy = false
+            onModelBusyChanged(false)
             return
         }
 
@@ -113,7 +117,7 @@ private suspend fun runIosAdBlockPipeline(
     } catch (e: Exception) {
         println("[PlatformWebView] Pipeline error: ${e.message}")
     } finally {
-        state.isModelBusy = false
+        onModelBusyChanged(false)
     }
 }
 

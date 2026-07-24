@@ -12,70 +12,76 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.adder.shared.UrlUtils
+import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 /**
  * Main browser screen composable — shared across Android and iOS.
  * Contains the URL bar, navigation buttons, and a platform-specific WebView.
+ * All UI state is hoisted into [BrowserViewModel].
  */
 @Composable
-fun BrowserScreen() {
-    var url by remember { mutableStateOf("https://www.google.com") }
-    var inputText by remember { mutableStateOf("https://www.google.com") }
-    var canGoBack by remember { mutableStateOf(false) }
-    var canGoForward by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-
-    // WebView controller for navigation commands
-    val webViewState = remember { WebViewState() }
-
+fun BrowserScreen(
+    viewModel: BrowserViewModel = viewModel { BrowserViewModel() }
+) {
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Toolbar
-            BrowserToolbar(
-                inputText = inputText,
-                canGoBack = canGoBack,
-                canGoForward = canGoForward,
-                onInputChange = { inputText = it },
-                onNavigate = {
-                    val normalized = UrlUtils.normalizeUrl(inputText)
-                    url = normalized
-                    inputText = normalized
-                    webViewState.loadUrl(normalized)
-                },
-                onBack = { webViewState.goBack() },
-                onForward = { webViewState.goForward() },
-                onRefresh = { webViewState.reload() }
-            )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                // Keep app content clear of the status bar (top) and the
+                // navigation/gesture bar + keyboard (bottom). safeDrawing is the
+                // union of system bars, display cutout, and IME insets.
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+        ) {
+            // WebView area — takes all remaining space above the bottom toolbar.
+            // The floating pill lives here so it sits just above the toolbar and
+            // never under the system navigation bar.
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                PlatformWebView(
+                    url = viewModel.url,
+                    controller = viewModel.webViewController,
+                    blockingEnabled = viewModel.blockingEnabled,
+                    modifier = Modifier.fillMaxSize(),
+                    onPageStarted = viewModel::onPageStarted,
+                    onPageFinished = viewModel::onPageFinished,
+                    onNavStateChanged = viewModel::onNavStateChanged,
+                    onModelBusyChanged = viewModel::onModelBusyChanged
+                )
+
+                // Floating ad-blocking toggle pill — floats above the toolbar
+                AdBlockTogglePill(
+                    blockingEnabled = viewModel.blockingEnabled,
+                    enabled = !viewModel.isLoading && !viewModel.isModelBusy,
+                    onToggle = viewModel::toggleBlocking,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 24.dp)
+                )
+            }
 
             // Loading indicator (for page load)
-            if (isLoading) {
+            if (viewModel.isLoading) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(3.dp)
                 )
             }
 
-            // Platform WebView
-            PlatformWebView(
-                url = url,
-                state = webViewState,
-                modifier = Modifier.fillMaxSize().weight(1f),
-                onPageStarted = { newUrl ->
-                    isLoading = true
-                    inputText = newUrl
-                },
-                onPageFinished = { newUrl ->
-                    isLoading = false
-                    inputText = newUrl
-                    canGoBack = webViewState.canGoBack
-                    canGoForward = webViewState.canGoForward
-                }
+            // Toolbar (bottom)
+            BrowserToolbar(
+                inputText = viewModel.inputText,
+                canGoBack = viewModel.canGoBack,
+                canGoForward = viewModel.canGoForward,
+                onInputChange = viewModel::onInputChange,
+                onNavigate = viewModel::onUrlSubmit,
+                onBack = viewModel::onBack,
+                onForward = viewModel::onForward,
+                onRefresh = viewModel::onRefresh,
+                modelName = viewModel.modelName
             )
         }
 
         // Model Inference Spinner
-        if (webViewState.isModelBusy) {
+        if (viewModel.isModelBusy) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.3f)
@@ -93,16 +99,6 @@ fun BrowserScreen() {
                 }
             }
         }
-
-        // Floating ad-blocking toggle pill — stays fixed while the page scrolls
-        AdBlockTogglePill(
-            blockingEnabled = webViewState.blockingEnabled,
-            enabled = !isLoading && !webViewState.isModelBusy,
-            onToggle = { webViewState.toggleBlocking() },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
-        )
     }
 }
 
@@ -151,7 +147,8 @@ private fun BrowserToolbar(
     onNavigate: () -> Unit,
     onBack: () -> Unit,
     onForward: () -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    modelName: String
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -165,6 +162,9 @@ private fun BrowserToolbar(
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Hamburger menu
+            AppMenu(modelName = modelName)
+
             // Back button
             IconButton(
                 onClick = onBack,
@@ -204,6 +204,45 @@ private fun BrowserToolbar(
                     }
                 )
             )
+        }
+    }
+}
+
+@Composable
+private fun AppMenu(modelName: String) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Text("\u2630", style = MaterialTheme.typography.bodyLarge)
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            // Settings (no navigation yet)
+            DropdownMenuItem(
+                text = { Text("Settings") },
+                onClick = { expanded = false }
+            )
+
+            HorizontalDivider()
+
+            // Current model — label with the active model name below it
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "Current model",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = modelName,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
         }
     }
 }
@@ -264,7 +303,16 @@ private fun BrowserToolbarPreview() {
             onNavigate = {},
             onBack = {},
             onForward = {},
-            onRefresh = {}
+            onRefresh = {},
+            modelName = "Gemini Nano"
         )
+    }
+}
+
+@Preview
+@Composable
+private fun AppMenuPreview() {
+    MaterialTheme {
+        AppMenu(modelName = "Gemini Nano")
     }
 }

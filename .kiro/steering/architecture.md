@@ -22,14 +22,24 @@ Users can switch between the ad-blocked view and the original ("virgin") view of
 
 Because ad removal is **destructive** (ad nodes are removed from the DOM, and a MutationObserver keeps removing dynamically-added ones), the toggle cannot simply reveal already-removed elements. Instead it uses a **reload-based bypass**:
 
-- `WebViewState.blockingEnabled` (default `true`) is the single source of truth. It lives in the remembered `WebViewState`, so the choice **persists across navigation for the session**.
-- `WebViewState.toggleBlocking()` flips the flag and reloads the current page.
-- Both platform WebViews read `state.blockingEnabled` on each page load:
+- `BrowserViewModel.blockingEnabled` (default `true`) is the single source of truth. It lives in the ViewModel, so the choice **persists across navigation for the session**.
+- `BrowserViewModel.toggleBlocking()` flips the flag and reloads the current page.
+- Both platform WebViews receive `blockingEnabled` and read the latest value (via `rememberUpdatedState`) on each page load:
   - **Blocking on:** inject early-hide CSS and run the ad-block pipeline (existing behavior).
   - **Blocking off (virgin):** skip both the early CSS injection and the pipeline, so the page loads completely untouched.
 - The pill is disabled while the page is loading or the model is busy, to avoid mid-pipeline reloads.
 
 This keeps the destructive removal strategy intact while giving a clean on/off switch at the cost of a reload per toggle.
+
+## UI State Management
+
+The browser screen follows an MVVM-style unidirectional data flow:
+
+- **`BrowserViewModel`** (`androidx.lifecycle.ViewModel`, in `commonMain`) owns all observable UI state (`url`, `inputText`, `canGoBack`, `canGoForward`, `isLoading`, `isModelBusy`, `blockingEnabled`, `modelName`) as Compose `mutableStateOf` and exposes intents (`onUrlSubmit`, `onBack`, `toggleBlocking`, etc.). It is obtained in the composable via the multiplatform `viewModel { }` factory.
+- **`WebViewController`** is a thin, state-free imperative bridge to the live platform WebView. The platform WebView registers its command handlers (`loadUrl`/`goBack`/`goForward`/`reload`) on creation; the ViewModel invokes them. This separation exists because those commands are tied to the live WebView instance and its composition lifecycle, so they should not live in a lifecycle-scoped ViewModel.
+- **`PlatformWebView`** takes the controller plus `blockingEnabled` and reports events back to the ViewModel through callbacks (`onPageStarted`, `onPageFinished`, `onNavStateChanged`, `onModelBusyChanged`) rather than mutating shared state directly.
+
+This gives a single source of truth for state, keeps navigation/intent logic out of composables, and survives Android configuration changes.
 
 ## Shared Module Ownership
 

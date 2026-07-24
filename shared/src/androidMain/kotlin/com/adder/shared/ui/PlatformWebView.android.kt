@@ -16,8 +16,6 @@ import com.adder.shared.js.DomExtractor
 import com.adder.shared.js.DomRemover
 import com.adder.shared.js.EarlyCssInjector
 import com.adder.shared.model.parseExtractedElements
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -27,14 +25,20 @@ private const val TAG = "PlatformWebView"
 @Composable
 actual fun PlatformWebView(
     url: String,
-    state: WebViewState,
+    controller: WebViewController,
+    blockingEnabled: Boolean,
     modifier: Modifier,
     onPageStarted: (url: String) -> Unit,
-    onPageFinished: (url: String) -> Unit
+    onPageFinished: (url: String) -> Unit,
+    onNavStateChanged: (canGoBack: Boolean, canGoForward: Boolean) -> Unit,
+    onModelBusyChanged: (busy: Boolean) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val adBlockEngine = remember { AdBlockEngine(LlmClassifier()) }
     var pipelineJob by remember { mutableStateOf<Job?>(null) }
+    // Read the latest toggle value inside the WebView's long-lived callbacks
+    // (the factory closure would otherwise capture a stale value).
+    val currentBlockingEnabled by rememberUpdatedState(blockingEnabled)
 
     AndroidView(
         factory = { context ->
@@ -55,10 +59,9 @@ actual fun PlatformWebView(
                     override fun onPageStarted(view: WebView?, pageUrl: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, pageUrl, favicon)
                         pipelineJob?.cancel()
-                        state.isModelBusy = false
                         pageUrl?.let { onPageStarted(it) }
                         // Inject early CSS only when blocking is enabled
-                        if (state.blockingEnabled) {
+                        if (currentBlockingEnabled) {
                             view?.evaluateJavascript(EarlyCssInjector.earlyHideCss, null)
                         }
                     }
@@ -66,14 +69,16 @@ actual fun PlatformWebView(
                     override fun onPageFinished(view: WebView?, pageUrl: String?) {
                         super.onPageFinished(view, pageUrl)
                         pageUrl?.let { onPageFinished(it) }
-                        state.canGoBack = view?.canGoBack() ?: false
-                        state.canGoForward = view?.canGoForward() ?: false
+                        onNavStateChanged(
+                            view?.canGoBack() ?: false,
+                            view?.canGoForward() ?: false
+                        )
 
                         // Run ad blocking pipeline only when blocking is enabled
-                        if (state.blockingEnabled) {
+                        if (currentBlockingEnabled) {
                             view?.let { wv ->
                                 pipelineJob = scope.launch {
-                                    runAdBlockPipeline(wv, adBlockEngine, pageUrl ?: "", state)
+                                    runAdBlockPipeline(wv, adBlockEngine, pageUrl ?: "", onModelBusyChanged)
                                 }
                             }
                         }
@@ -82,18 +87,18 @@ actual fun PlatformWebView(
 
                 webChromeClient = WebChromeClient()
 
-                // Wire state commands
-                state.onLoadUrl = { loadUrl(it) }
-                state.onGoBack = { goBack() }
-                state.onGoForward = { goForward() }
-                state.onReload = { reload() }
+                // Wire imperative commands to the controller
+                controller.onLoadUrl = { loadUrl(it) }
+                controller.onGoBack = { goBack() }
+                controller.onGoForward = { goForward() }
+                controller.onReload = { reload() }
 
                 // Load initial URL
                 loadUrl(url)
             }
         },
         modifier = modifier,
-        update = { /* URL changes handled via state.loadUrl */ }
+        update = { /* URL changes handled via controller.loadUrl */ }
     )
 }
 
@@ -101,17 +106,17 @@ private suspend fun runAdBlockPipeline(
     webView: WebView,
     engine: AdBlockEngine,
     pageUrl: String,
-    state: WebViewState
+    onModelBusyChanged: (Boolean) -> Unit
 ) {
     try {
-        state.isModelBusy = true
+        onModelBusyChanged(true)
         // Extract DOM elements
         val jsonResult = evaluateJsAsync(webView, DomExtractor.extractionScript)
         val elements = parseExtractedElements(unescapeJsString(jsonResult))
         Log.d(TAG, "Extracted ${elements.size} candidate elements")
 
         if (elements.isEmpty()) {
-            state.isModelBusy = false
+            onModelBusyChanged(false)
             return
         }
 
@@ -119,7 +124,7 @@ private suspend fun runAdBlockPipeline(
         val result = engine.runPipeline(elements, pageUrl)
         if (result.skipped || result.selectorsToRemove.isEmpty()) {
             Log.d(TAG, if (result.skipped) "Whitelisted" else "No ads found")
-            state.isModelBusy = false
+            onModelBusyChanged(false)
             return
         }
 
@@ -135,7 +140,7 @@ private suspend fun runAdBlockPipeline(
     } catch (e: Exception) {
         Log.e(TAG, "Pipeline error", e)
     } finally {
-        state.isModelBusy = false
+        onModelBusyChanged(false)
     }
 }
 
