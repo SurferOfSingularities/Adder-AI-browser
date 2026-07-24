@@ -1,0 +1,52 @@
+# Coding Conventions
+
+## Language & Style
+
+- Follow official Kotlin coding conventions: https://kotlinlang.org/docs/coding-conventions.html
+- iOS platform code is written in Swift, following Swift API Design Guidelines.
+- Keep code concise and readable. Prefer clarity over cleverness.
+
+## Package Structure
+
+- `com.adder.shared` — Shared KMP module (commonMain)
+- `com.adder.shared.model` — Data models (DomElement, classification results)
+- `com.adder.shared.detection` — Ad detection logic (heuristics, prompt building)
+- `com.adder.shared.engine` — Pipeline orchestration
+- `com.adder.shared.ui` — Compose Multiplatform UI (browser screen, composables)
+- `com.adder.android` — Android app entry point (single Activity)
+- iOS code uses Swift module naming conventions (minimal — just entry point + LLM bridge)
+
+## Libraries & Patterns
+
+- **UI:** Compose Multiplatform for all UI. The browser screen is a shared composable in commonMain.
+- **WebView in Compose:** Use `AndroidView` (Android) and `UIKitView` (iOS) to embed platform-native WebViews inside Compose.
+- **JSON:** Use kotlinx.serialization. Do not use Gson or Moshi.
+- **Async:** Use Kotlin coroutines. Do not use RxJava.
+- **Platform abstractions:** Use `expect`/`actual` declarations for platform-specific implementations (e.g., LLM classifiers, WebView bridges).
+- **WebView:** Platform-native only (Android WebView, iOS WKWebView), embedded in Compose via interop.
+- **JavaScript injection code:** Stored as string constants in the shared module for reuse across platforms.
+- **Navigation:** Not needed for MVP (single screen app). If needed later, use Compose Navigation.
+
+## iOS Interop
+
+- iOS app uses `ComposeUIViewController` from Compose Multiplatform to render the shared Compose UI.
+- Swift code is minimal — just the app entry point and LLM bridge.
+- Platform-specific `actual` implementations in `iosMain` delegate to Swift where needed (especially for Apple Foundation Models which require Swift).
+- WKWebView is embedded in Compose via `UIKitView` interop.
+
+## Naming
+
+- `expect`/`actual` classes use the same name across source sets.
+- Use descriptive names: `AdDetector`, `LlmClassifier`, `DomElement`, `AdBlockEngine`.
+- Enum values use UPPER_SNAKE_CASE: `DEFINITE_AD`, `LIKELY_AD`, `AMBIGUOUS`, `NOT_AD`.
+
+## Testing
+
+- No automated tests for now. Focus on working, demoable code first.
+- Manual verification on real devices is the primary validation method during MVP.
+
+## General
+
+- Keep the shared module as the source of truth for business logic.
+- Platform modules should be thin: UI + platform API bridges only.
+- Prefer simple, direct implementations over over-engineered abstractions.

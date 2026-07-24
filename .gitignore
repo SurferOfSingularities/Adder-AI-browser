@@ -1,0 +1,24 @@
+# Gradle
+.gradle/
+build/
+*/build/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Gradle wrapper jar (checked in for CI, but can be gitignored if preferred)
+# gradle/wrapper/gradle-wrapper.jar
+
+# Local properties
+local.properties
+
+# iOS
+iosApp/Pods/
+iosApp/*.xcworkspace
+iosApp/*.xcodeproj/xcuserdata/
+iosApp/DerivedData/
+
+# Kotlin
+*.kotlin_module
