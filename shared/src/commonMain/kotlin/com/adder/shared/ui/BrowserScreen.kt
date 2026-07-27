@@ -4,6 +4,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -130,11 +136,21 @@ private fun AdBlockTogglePill(
         shadowElevation = 6.dp,
         modifier = modifier
     ) {
-        Text(
-            text = if (blockingEnabled) "\uD83D\uDEE1 Blocking On" else "\uD83D\uDEE1 Blocking Off",
-            style = MaterialTheme.typography.labelLarge,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
-        )
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Shield,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (blockingEnabled) "Blocking On" else "Blocking Off",
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
     }
 }
 
@@ -170,7 +186,10 @@ private fun BrowserToolbar(
                 onClick = onBack,
                 enabled = canGoBack
             ) {
-                Text("◀", style = MaterialTheme.typography.bodyLarge)
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Backl"
+                )
             }
 
             // Forward button
@@ -178,12 +197,18 @@ private fun BrowserToolbar(
                 onClick = onForward,
                 enabled = canGoForward
             ) {
-                Text("▶", style = MaterialTheme.typography.bodyLarge)
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Forward"
+                )
             }
 
             // Refresh button
             IconButton(onClick = onRefresh) {
-                Text("↻", style = MaterialTheme.typography.bodyLarge)
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = "Refresh"
+                )
             }
 
             // URL input
@@ -214,7 +239,10 @@ private fun AppMenu(modelName: String) {
 
     Box {
         IconButton(onClick = { expanded = true }) {
-            Text("\u2630", style = MaterialTheme.typography.bodyLarge)
+            Icon(
+                imageVector = Icons.Filled.Menu,
+                contentDescription = "Menu"
+            )
         }
 
         DropdownMenu(

@@ -33,6 +33,12 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
+            // Material icons are no longer bundled with material3 as of Compose
+            // Multiplatform 1.8, so the icon set is added explicitly (pinned to the
+            // last published JetBrains Compose icons version). Not using the
+            // `compose.materialIconsExtended` accessor because it resolves to the
+            // compose version (1.8.x), which was never published for icons.
+            implementation(libs.compose.material.icons.extended)
             implementation(compose.ui)
             implementation(compose.components.uiToolingPreview)
             implementation(libs.jetbrains.lifecycle.viewmodel.compose)

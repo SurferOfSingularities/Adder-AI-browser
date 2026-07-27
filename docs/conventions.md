@@ -53,6 +53,13 @@
 - No automated tests for now. Focus on working, demoable code first.
 - Manual verification on real devices is the primary validation method during MVP.
 
+## AI Agent Workflow
+
+- **Gradle execution:** At the start of every session, the AI agent must ask whether it is allowed to run Gradle tasks (e.g. `sync`, `build`, `assemble`, `test`, `run`) during that session, and wait for an answer before running any.
+  - If the user allows it, the agent may run Gradle tasks as needed for that session.
+  - If the user declines (or has not yet answered), the agent makes code and configuration changes only, and leaves running Gradle to the user.
+  - Treat this as a per-session preference — re-ask at the start of each new session rather than assuming a previous answer still holds.
+
 ## Documentation Maintenance
 
 - **Source of Truth:** The `.kiro/steering/` and `docs/` directories must always be kept in sync.
