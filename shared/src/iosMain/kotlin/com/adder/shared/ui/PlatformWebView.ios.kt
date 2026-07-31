@@ -71,6 +71,7 @@ actual fun PlatformWebView(
             controller.onGoBack = { webView.goBack() }
             controller.onGoForward = { webView.goForward() }
             controller.onReload = { webView.reload() }
+            controller.onCurrentTitle = { webView.title }
 
             // Load initial URL
             NSURL.URLWithString(url)?.let { nsUrl ->

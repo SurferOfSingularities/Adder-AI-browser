@@ -45,9 +45,24 @@ kotlin {
             implementation(libs.jetbrains.lifecycle.runtime.compose)
         }
 
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            // Kotest Property supplies the generators + checkAll for the
+            // property-based tests. The test framework itself is kotlin.test, which
+            // maps to JUnit4 on the Android/JVM target and needs no extra runner
+            // wiring, so `./gradlew :shared:testDebugUnitTest` runs commonTest.
+            implementation(libs.kotest.property)
+            implementation(libs.kotest.assertions.core)
+            // checkAll is a suspend function; runTest provides the coroutine scope.
+            implementation(libs.kotlinx.coroutines.test)
+        }
+
         androidMain.dependencies {
             implementation(libs.mlkit.genai.prompt)
             implementation(compose.uiTooling)
+            // App Startup: supplies the application Context to AppContextHolder so
+            // the shared module can back PersistentStore with SharedPreferences.
+            implementation(libs.androidx.startup.runtime)
         }
 
         val iosMain by creating {

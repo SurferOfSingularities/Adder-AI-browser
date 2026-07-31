@@ -82,7 +82,23 @@ fun BrowserScreen(
                 onBack = viewModel::onBack,
                 onForward = viewModel::onForward,
                 onRefresh = viewModel::onRefresh,
+                onHistory = viewModel::openHistory,
                 modelName = viewModel.modelName
+            )
+        }
+
+        // History overlay — covers the page (which stays loaded underneath, so
+        // closing it returns to the same page without a reload).
+        if (viewModel.historyVisible) {
+            HistoryView(
+                entries = viewModel.historyEntries,
+                onEntryClick = viewModel::onRevisit,
+                onEntryDelete = viewModel::onDeleteHistory,
+                onClearAll = viewModel::onClearHistory,
+                onClose = viewModel::closeHistory,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
             )
         }
 
@@ -164,6 +180,7 @@ private fun BrowserToolbar(
     onBack: () -> Unit,
     onForward: () -> Unit,
     onRefresh: () -> Unit,
+    onHistory: () -> Unit,
     modelName: String
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -179,7 +196,7 @@ private fun BrowserToolbar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Hamburger menu
-            AppMenu(modelName = modelName)
+            AppMenu(modelName = modelName, onHistory = onHistory)
 
             // Back button
             IconButton(
@@ -234,7 +251,10 @@ private fun BrowserToolbar(
 }
 
 @Composable
-private fun AppMenu(modelName: String) {
+private fun AppMenu(
+    modelName: String,
+    onHistory: () -> Unit
+) {
     var expanded by remember { mutableStateOf(false) }
 
     Box {
@@ -249,6 +269,14 @@ private fun AppMenu(modelName: String) {
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
+            DropdownMenuItem(
+                text = { Text("History") },
+                onClick = {
+                    expanded = false
+                    onHistory()
+                }
+            )
+
             // Settings (no navigation yet)
             DropdownMenuItem(
                 text = { Text("Settings") },
@@ -332,6 +360,7 @@ private fun BrowserToolbarPreview() {
             onBack = {},
             onForward = {},
             onRefresh = {},
+            onHistory = {},
             modelName = "Gemini Nano"
         )
     }
@@ -341,6 +370,6 @@ private fun BrowserToolbarPreview() {
 @Composable
 private fun AppMenuPreview() {
     MaterialTheme {
-        AppMenu(modelName = "Gemini Nano")
+        AppMenu(modelName = "Gemini Nano", onHistory = {})
     }
 }

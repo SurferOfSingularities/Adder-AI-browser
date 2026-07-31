@@ -92,6 +92,7 @@ actual fun PlatformWebView(
                 controller.onGoBack = { goBack() }
                 controller.onGoForward = { goForward() }
                 controller.onReload = { reload() }
+                controller.onCurrentTitle = { title }
 
                 // Load initial URL
                 loadUrl(url)

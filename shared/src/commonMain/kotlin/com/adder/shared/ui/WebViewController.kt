@@ -12,6 +12,7 @@ class WebViewController {
     internal var onGoBack: (() -> Unit)? = null
     internal var onGoForward: (() -> Unit)? = null
     internal var onReload: (() -> Unit)? = null
+    internal var onCurrentTitle: (() -> String?)? = null
 
     fun loadUrl(url: String) {
         onLoadUrl?.invoke(url)
@@ -28,4 +29,11 @@ class WebViewController {
     fun reload() {
         onReload?.invoke()
     }
+
+    /**
+     * The title of the page currently loaded in the WebView, or null when no
+     * WebView is attached or the page reports no title. Used to label history
+     * entries.
+     */
+    fun currentTitle(): String? = onCurrentTitle?.invoke()
 }
