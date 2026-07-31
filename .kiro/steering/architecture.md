@@ -18,7 +18,7 @@ Pages load and render normally first. Ad removal happens after page load complet
 
 ## Ad-Blocking Toggle (Virgin View)
 
-Users can switch between the ad-blocked view and the original ("virgin") view of a page via a floating pill button (bottom-center, fixed while the page scrolls).
+Users can switch between the ad-blocked view and the original ("virgin") view of a page via a floating button anchored to the bottom-right of the WebView area, fixed while the page scrolls. The button is a compact, slightly-rounded rectangle whose only content is a shield icon: a green container means blocking is on, a yellow container means blocking is off, and both colors are the same in light and dark mode.
 
 Because ad removal is **destructive** (ad nodes are removed from the DOM, and a MutationObserver keeps removing dynamically-added ones), the toggle cannot simply reveal already-removed elements. Instead it uses a **reload-based bypass**:
 
@@ -27,7 +27,14 @@ Because ad removal is **destructive** (ad nodes are removed from the DOM, and a 
 - Both platform WebViews receive `blockingEnabled` and read the latest value (via `rememberUpdatedState`) on each page load:
   - **Blocking on:** inject early-hide CSS and run the ad-block pipeline (existing behavior).
   - **Blocking off (virgin):** skip both the early CSS injection and the pipeline, so the page loads completely untouched.
-- The pill is disabled while the page is loading or the model is busy, to avoid mid-pipeline reloads.
+- The button is non-interactive while the page is loading or the model is busy, to avoid mid-pipeline reloads.
+
+Because the button carries no text label, every accepted tap also shows a short confirmation message:
+
+- `toggleBlocking()` publishes a single-consumption `BrowserViewModel.toggleNotice` reading `Blocking : On` or `Blocking : Off` for the state the tap produced, and `BrowserScreen` clears it with `onToggleNoticeShown()` once it has been shown.
+- `BrowserScreen` presents it as a Material 3 `Snackbar` for `SnackbarDuration.Short`, driven from shared `commonMain` code so Android and iOS get identical text, placement, and duration. The host sits at the bottom-center of the WebView area, above the button.
+- The message survives the reload the toggle triggers, because the effect that shows it is keyed on the notice rather than on load state.
+- A tap while an earlier message is still visible replaces it rather than queueing a second one, so at most one message is on screen.
 
 This keeps the destructive removal strategy intact while giving a clean on/off switch at the cost of a reload per toggle.
 
@@ -35,7 +42,7 @@ This keeps the destructive removal strategy intact while giving a clean on/off s
 
 The browser screen follows an MVVM-style unidirectional data flow:
 
-- **`BrowserViewModel`** (`androidx.lifecycle.ViewModel`, in `commonMain`) owns all observable UI state (`url`, `inputText`, `canGoBack`, `canGoForward`, `isLoading`, `isModelBusy`, `blockingEnabled`, `modelName`) as Compose `mutableStateOf` and exposes intents (`onUrlSubmit`, `onBack`, `toggleBlocking`, etc.). It is obtained in the composable via the multiplatform `viewModel { }` factory.
+- **`BrowserViewModel`** (`androidx.lifecycle.ViewModel`, in `commonMain`) owns all observable UI state (`url`, `inputText`, `canGoBack`, `canGoForward`, `isLoading`, `isModelBusy`, `blockingEnabled`, `toggleNotice`, `modelName`) as Compose `mutableStateOf` and exposes intents (`onUrlSubmit`, `onBack`, `toggleBlocking`, `onToggleNoticeShown`, etc.). It is obtained in the composable via the multiplatform `viewModel { }` factory.
 - **`WebViewController`** is a thin, state-free imperative bridge to the live platform WebView. The platform WebView registers its command handlers (`loadUrl`/`goBack`/`goForward`/`reload`) on creation; the ViewModel invokes them. This separation exists because those commands are tied to the live WebView instance and its composition lifecycle, so they should not live in a lifecycle-scoped ViewModel.
 - **`PlatformWebView`** takes the controller plus `blockingEnabled` and reports events back to the ViewModel through callbacks (`onPageStarted`, `onPageFinished`, `onNavStateChanged`, `onModelBusyChanged`) rather than mutating shared state directly.
 

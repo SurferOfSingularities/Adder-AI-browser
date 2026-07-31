@@ -40,6 +40,25 @@ class BrowserViewModel(
     var blockingEnabled by mutableStateOf(true)
         private set
 
+    /**
+     * Pending toggle confirmation message, or `null` when there is nothing to
+     * show. Single-consumption: the screen calls [onToggleNoticeShown] once it
+     * has presented the message. A single nullable slot is what makes "at most
+     * one pending notice" structural rather than enforced — a second
+     * publication overwrites the first because there is nowhere for it to queue.
+     *
+     * Assumption: the screen keys its presenting effect on the notice *value*,
+     * so two consecutive notices must differ. That holds today because the only
+     * producer is [toggleBlocking], a strict flip that always alternates
+     * `Blocking : On` / `Blocking : Off`. If a second producer is ever added
+     * (for example a whitelist rule forcing blocking off), two identical
+     * consecutive messages become possible and this must become an
+     * identity-bearing wrapper, e.g.
+     * `data class ToggleNotice(val message: String, val id: Long)`.
+     */
+    var toggleNotice by mutableStateOf<String?>(null)
+        private set
+
     /** Human-readable name of the on-device LLM on this platform. */
     val modelName: String = currentModelName()
 
@@ -79,12 +98,23 @@ class BrowserViewModel(
     fun onRefresh() = webViewController.reload()
 
     /**
-     * Flips ad blocking on/off and reloads the current page so the new mode
-     * takes effect. Blocked mode runs the pipeline; virgin mode skips it.
+     * Flips ad blocking on/off, publishes the confirmation message for the new
+     * state, and reloads the current page so the new mode takes effect. Blocked
+     * mode runs the pipeline; virgin mode skips it.
      */
     fun toggleBlocking() {
         blockingEnabled = !blockingEnabled
+        // Derived *after* the flip, so the message names the state this tap
+        // produced rather than the one it replaced.
+        toggleNotice = if (blockingEnabled) NOTICE_BLOCKING_ON else NOTICE_BLOCKING_OFF
+        // Imperative side effect on the live WebView; reads neither piece of
+        // state above, so it goes last.
         webViewController.reload()
+    }
+
+    /** Marks the pending [toggleNotice] as presented, so it is shown only once. */
+    fun onToggleNoticeShown() {
+        toggleNotice = null
     }
 
     // --- History intents ---
@@ -151,5 +181,10 @@ class BrowserViewModel(
 
     private companion object {
         const val INITIAL_URL = "https://www.google.com"
+
+        // Exact wording, spaces around the colon included, so the literals live
+        // in one place.
+        const val NOTICE_BLOCKING_ON = "Blocking : On"
+        const val NOTICE_BLOCKING_OFF = "Blocking : Off"
     }
 }

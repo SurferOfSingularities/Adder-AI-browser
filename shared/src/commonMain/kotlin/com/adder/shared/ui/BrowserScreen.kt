@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,6 +31,23 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 fun BrowserScreen(
     viewModel: BrowserViewModel = viewModel { BrowserViewModel() }
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val notice = viewModel.toggleNotice
+
+    // Keyed on the notice, deliberately not on isLoading: the reload started by
+    // toggleBlocking() must not restart or cut short the message. A newer notice
+    // does cancel it, which replaces the visible message instead of queueing
+    // behind it.
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            snackbarHostState.showSnackbar(
+                message = notice,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.onToggleNoticeShown()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -40,8 +58,8 @@ fun BrowserScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
             // WebView area — takes all remaining space above the bottom toolbar.
-            // The floating pill lives here so it sits just above the toolbar and
-            // never under the system navigation bar.
+            // The floating toggle button lives here so it sits just above the
+            // toolbar and never under the system navigation bar.
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 PlatformWebView(
                     url = viewModel.url,
@@ -54,14 +72,32 @@ fun BrowserScreen(
                     onModelBusyChanged = viewModel::onModelBusyChanged
                 )
 
-                // Floating ad-blocking toggle pill — floats above the toolbar
-                AdBlockTogglePill(
+                // Floating ad-blocking toggle button — floats above the toolbar
+                AdBlockToggleButton(
                     blockingEnabled = viewModel.blockingEnabled,
                     enabled = !viewModel.isLoading && !viewModel.isModelBusy,
                     onToggle = viewModel::toggleBlocking,
                     modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = 24.dp, end = 24.dp)
+                )
+
+                // Toggle confirmation message — declared last in this Box so it
+                // draws above both the page content and the toggle button.
+                //
+                // The 88dp is derived from the toggle it must clear: 24dp of
+                // toggle bottom padding + 48dp of toggle height = 72dp, so the
+                // toggle's top edge sits 72dp above the bottom of this Box, and
+                // 88dp leaves a nominal 16dp gap above it. The nominal figure
+                // understates the visible gap: Material 3's Snackbar carries its
+                // own 12dp of padding inside the host, so the actual space is
+                // closer to 28dp. Both paddings measure from the same origin, so
+                // the two numbers must be changed together.
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 24.dp)
+                        .padding(bottom = 88.dp)
                 )
             }
 
@@ -124,49 +160,53 @@ fun BrowserScreen(
     }
 }
 
+// Fixed colors for the ad-blocking toggle. Deliberately hardcoded literals with
+// no MaterialTheme.colorScheme reference, so the control looks identical in the
+// light and dark color schemes.
+private val BlockingOnContainer = Color(0xFF2E7D32)  // green
+private val BlockingOnIcon = Color(0xFFFFFFFF)
+private val BlockingOffContainer = Color(0xFFF9C82E) // yellow
+private val BlockingOffIcon = Color(0xFF1F1B00)
+
 @Composable
-private fun AdBlockTogglePill(
+private fun AdBlockToggleButton(
     blockingEnabled: Boolean,
     enabled: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val containerColor = if (blockingEnabled) {
-        MaterialTheme.colorScheme.primary
+    val containerColor = if (blockingEnabled) BlockingOnContainer else BlockingOffContainer
+    val iconColor = if (blockingEnabled) BlockingOnIcon else BlockingOffIcon
+    val description = if (blockingEnabled) {
+        "Ad blocking on. Tap to turn off."
     } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val contentColor = if (blockingEnabled) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+        "Ad blocking off. Tap to turn on."
     }
 
     Surface(
         onClick = onToggle,
         enabled = enabled,
-        shape = RoundedCornerShape(50),
+        shape = RoundedCornerShape(8.dp),
         color = containerColor,
-        contentColor = contentColor,
-        tonalElevation = 6.dp,
+        contentColor = iconColor,
+        // Tonal elevation is intentionally 0: M3 tonal tinting would only apply to
+        // theme surface colors anyway, and leaving it off keeps the container color
+        // exactly the literal above under every color scheme.
+        tonalElevation = 0.dp,
         shadowElevation = 6.dp,
         modifier = modifier
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Shield,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (blockingEnabled) "Blocking On" else "Blocking Off",
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
+        Icon(
+            imageVector = Icons.Filled.Shield,
+            contentDescription = description,
+            // Modifier order matters: padding before size gives a 24dp glyph with
+            // 12dp on all four sides, so the Surface measures 48dp x 48dp (square
+            // shape + minimum touch target). Reversing the order would size the
+            // padded box to 24dp and shrink the glyph.
+            modifier = Modifier
+                .padding(12.dp)
+                .size(24.dp)
+        )
     }
 }
 
@@ -313,9 +353,9 @@ private fun AppMenu(
 
 @Preview
 @Composable
-private fun AdBlockTogglePillBlockingOnPreview() {
+private fun AdBlockToggleButtonBlockingOnPreview() {
     MaterialTheme {
-        AdBlockTogglePill(
+        AdBlockToggleButton(
             blockingEnabled = true,
             enabled = true,
             onToggle = {}
@@ -325,9 +365,9 @@ private fun AdBlockTogglePillBlockingOnPreview() {
 
 @Preview
 @Composable
-private fun AdBlockTogglePillBlockingOffPreview() {
+private fun AdBlockToggleButtonBlockingOffPreview() {
     MaterialTheme {
-        AdBlockTogglePill(
+        AdBlockToggleButton(
             blockingEnabled = false,
             enabled = true,
             onToggle = {}
@@ -337,13 +377,37 @@ private fun AdBlockTogglePillBlockingOffPreview() {
 
 @Preview
 @Composable
-private fun AdBlockTogglePillDisabledPreview() {
+private fun AdBlockToggleButtonDisabledPreview() {
     MaterialTheme {
-        AdBlockTogglePill(
+        AdBlockToggleButton(
             blockingEnabled = true,
             enabled = false,
             onToggle = {}
         )
+    }
+}
+
+// The toggle confirmation message is previewed as the bare Snackbar rather than
+// the SnackbarHost: with no coroutine driving SnackbarHostState the host renders
+// empty, while the Snackbar it delegates to gives the same pixels from static
+// text.
+@Preview
+@Composable
+private fun ToggleNoticeSnackbarOnPreview() {
+    MaterialTheme {
+        Snackbar {
+            Text("Blocking : On")
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun ToggleNoticeSnackbarOffPreview() {
+    MaterialTheme {
+        Snackbar {
+            Text("Blocking : Off")
+        }
     }
 }
 
