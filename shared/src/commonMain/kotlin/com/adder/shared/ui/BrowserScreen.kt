@@ -7,7 +7,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.*
@@ -16,15 +16,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 /**
  * Main browser screen composable — shared across Android and iOS.
- * Contains the URL bar, navigation buttons, and a platform-specific WebView.
+ * Contains the URL bar, navigation buttons, tab count, and a platform-specific WebView.
  * All UI state is hoisted into [BrowserViewModel].
  */
 @Composable
@@ -32,19 +35,28 @@ fun BrowserScreen(
     viewModel: BrowserViewModel = viewModel { BrowserViewModel() }
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
-    val notice = viewModel.toggleNotice
+    val toggleNotice = viewModel.toggleNotice
+    val snackbarNotice = viewModel.snackbarNotice
 
-    // Keyed on the notice, deliberately not on isLoading: the reload started by
-    // toggleBlocking() must not restart or cut short the message. A newer notice
-    // does cancel it, which replaces the visible message instead of queueing
-    // behind it.
-    LaunchedEffect(notice) {
-        if (notice != null) {
+    // Toggle confirmation message.
+    LaunchedEffect(toggleNotice) {
+        if (toggleNotice != null) {
             snackbarHostState.showSnackbar(
-                message = notice,
+                message = toggleNotice,
                 duration = SnackbarDuration.Short
             )
             viewModel.onToggleNoticeShown()
+        }
+    }
+
+    // General snackbar notices (tab limit, etc.).
+    LaunchedEffect(snackbarNotice) {
+        if (snackbarNotice != null) {
+            snackbarHostState.showSnackbar(
+                message = snackbarNotice,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.onSnackbarNoticeShown()
         }
     }
 
@@ -52,27 +64,26 @@ fun BrowserScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // Keep app content clear of the status bar (top) and the
-                // navigation/gesture bar + keyboard (bottom). safeDrawing is the
-                // union of system bars, display cutout, and IME insets.
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
-            // WebView area — takes all remaining space above the bottom toolbar.
-            // The floating toggle button lives here so it sits just above the
-            // toolbar and never under the system navigation bar.
+            // WebView area — keyed by activeTabId so switching tabs re-composes
+            // with the correct controller and URL.
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                PlatformWebView(
-                    url = viewModel.url,
-                    controller = viewModel.webViewController,
-                    blockingEnabled = viewModel.blockingEnabled,
-                    modifier = Modifier.fillMaxSize(),
-                    onPageStarted = viewModel::onPageStarted,
-                    onPageFinished = viewModel::onPageFinished,
-                    onNavStateChanged = viewModel::onNavStateChanged,
-                    onModelBusyChanged = viewModel::onModelBusyChanged
-                )
+                val currentTabId = viewModel.activeTabId
+                key(currentTabId) {
+                    PlatformWebView(
+                        url = viewModel.url,
+                        controller = viewModel.webViewController,
+                        blockingEnabled = viewModel.blockingEnabled,
+                        modifier = Modifier.fillMaxSize(),
+                        onPageStarted = { url -> viewModel.onPageStarted(currentTabId, url) },
+                        onPageFinished = { url -> viewModel.onPageFinished(currentTabId, url) },
+                        onNavStateChanged = { back, fwd -> viewModel.onNavStateChanged(currentTabId, back, fwd) },
+                        onModelBusyChanged = { busy -> viewModel.onModelBusyChanged(currentTabId, busy) }
+                    )
+                }
 
-                // Floating ad-blocking toggle button — floats above the toolbar
+                // Floating ad-blocking toggle button
                 AdBlockToggleButton(
                     blockingEnabled = viewModel.blockingEnabled,
                     enabled = !viewModel.isLoading && !viewModel.isModelBusy,
@@ -82,17 +93,7 @@ fun BrowserScreen(
                         .padding(bottom = 24.dp, end = 24.dp)
                 )
 
-                // Toggle confirmation message — declared last in this Box so it
-                // draws above both the page content and the toggle button.
-                //
-                // The 88dp is derived from the toggle it must clear: 24dp of
-                // toggle bottom padding + 48dp of toggle height = 72dp, so the
-                // toggle's top edge sits 72dp above the bottom of this Box, and
-                // 88dp leaves a nominal 16dp gap above it. The nominal figure
-                // understates the visible gap: Material 3's Snackbar carries its
-                // own 12dp of padding inside the host, so the actual space is
-                // closer to 28dp. Both paddings measure from the same origin, so
-                // the two numbers must be changed together.
+                // Snackbar host for notices
                 SnackbarHost(
                     hostState = snackbarHostState,
                     modifier = Modifier
@@ -101,7 +102,7 @@ fun BrowserScreen(
                 )
             }
 
-            // Loading indicator (for page load)
+            // Loading indicator
             if (viewModel.isLoading) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(3.dp)
@@ -113,18 +114,37 @@ fun BrowserScreen(
                 inputText = viewModel.inputText,
                 canGoBack = viewModel.canGoBack,
                 canGoForward = viewModel.canGoForward,
+                tabCount = viewModel.tabCount,
                 onInputChange = viewModel::onInputChange,
                 onNavigate = viewModel::onUrlSubmit,
                 onBack = viewModel::onBack,
                 onForward = viewModel::onForward,
                 onRefresh = viewModel::onRefresh,
                 onHistory = viewModel::openHistory,
+                onTabSwitcher = viewModel::openTabSwitcher,
                 modelName = viewModel.modelName
             )
         }
 
-        // History overlay — covers the page (which stays loaded underneath, so
-        // closing it returns to the same page without a reload).
+        // Tab switcher overlay
+        if (viewModel.tabSwitcherVisible) {
+            TabSwitcherView(
+                tabs = viewModel.tabs,
+                activeTabId = viewModel.activeTabId,
+                onTabSelected = { id ->
+                    viewModel.closeTabSwitcher()
+                    viewModel.activateTab(id)
+                },
+                onTabClose = viewModel::closeTab,
+                onNewTab = viewModel::createTab,
+                onClose = viewModel::closeTabSwitcher,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+            )
+        }
+
+        // History overlay
         if (viewModel.historyVisible) {
             HistoryView(
                 entries = viewModel.historyEntries,
@@ -160,12 +180,10 @@ fun BrowserScreen(
     }
 }
 
-// Fixed colors for the ad-blocking toggle. Deliberately hardcoded literals with
-// no MaterialTheme.colorScheme reference, so the control looks identical in the
-// light and dark color schemes.
-private val BlockingOnContainer = Color(0xFF2E7D32)  // green
+// Fixed colors for the ad-blocking toggle.
+private val BlockingOnContainer = Color(0xFF2E7D32)
 private val BlockingOnIcon = Color(0xFFFFFFFF)
-private val BlockingOffContainer = Color(0xFFF9C82E) // yellow
+private val BlockingOffContainer = Color(0xFFF9C82E)
 private val BlockingOffIcon = Color(0xFF1F1B00)
 
 @Composable
@@ -189,9 +207,6 @@ private fun AdBlockToggleButton(
         shape = RoundedCornerShape(8.dp),
         color = containerColor,
         contentColor = iconColor,
-        // Tonal elevation is intentionally 0: M3 tonal tinting would only apply to
-        // theme surface colors anyway, and leaving it off keeps the container color
-        // exactly the literal above under every color scheme.
         tonalElevation = 0.dp,
         shadowElevation = 6.dp,
         modifier = modifier
@@ -199,10 +214,6 @@ private fun AdBlockToggleButton(
         Icon(
             imageVector = Icons.Filled.Shield,
             contentDescription = description,
-            // Modifier order matters: padding before size gives a 24dp glyph with
-            // 12dp on all four sides, so the Surface measures 48dp x 48dp (square
-            // shape + minimum touch target). Reversing the order would size the
-            // padded box to 24dp and shrink the glyph.
             modifier = Modifier
                 .padding(12.dp)
                 .size(24.dp)
@@ -215,12 +226,14 @@ private fun BrowserToolbar(
     inputText: String,
     canGoBack: Boolean,
     canGoForward: Boolean,
+    tabCount: Int,
     onInputChange: (String) -> Unit,
     onNavigate: () -> Unit,
     onBack: () -> Unit,
     onForward: () -> Unit,
     onRefresh: () -> Unit,
     onHistory: () -> Unit,
+    onTabSwitcher: () -> Unit,
     modelName: String
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -235,7 +248,7 @@ private fun BrowserToolbar(
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Hamburger menu
+            // 3-dot menu (was hamburger)
             AppMenu(modelName = modelName, onHistory = onHistory)
 
             // Back button
@@ -245,7 +258,7 @@ private fun BrowserToolbar(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Backl"
+                    contentDescription = "Back"
                 )
             }
 
@@ -286,7 +299,42 @@ private fun BrowserToolbar(
                     }
                 )
             )
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            // Tab count button
+            TabCountButton(
+                count = tabCount,
+                onClick = onTabSwitcher
+            )
         }
+    }
+}
+
+/**
+ * Compact button showing the current open tab count. Tapping opens the tab switcher.
+ */
+@Composable
+internal fun TabCountButton(
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val description = "$count open tabs"
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        tonalElevation = 4.dp,
+        modifier = modifier.semantics { contentDescription = description }
+    ) {
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        )
     }
 }
 
@@ -300,7 +348,7 @@ private fun AppMenu(
     Box {
         IconButton(onClick = { expanded = true }) {
             Icon(
-                imageVector = Icons.Filled.Menu,
+                imageVector = Icons.Filled.MoreVert,
                 contentDescription = "Menu"
             )
         }
@@ -317,7 +365,6 @@ private fun AppMenu(
                 }
             )
 
-            // Settings (no navigation yet)
             DropdownMenuItem(
                 text = { Text("Settings") },
                 onClick = { expanded = false }
@@ -325,7 +372,6 @@ private fun AppMenu(
 
             HorizontalDivider()
 
-            // Current model — label with the active model name below it
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -345,10 +391,6 @@ private fun AppMenu(
 
 // ---------------------------------------------------------------------------
 // Previews
-//
-// Note: BrowserScreen / App / PlatformWebView embed the expect/actual platform
-// WebView, which needs a live native WebView and cannot render in a preview.
-// Only the standalone, stateless composables are previewed here.
 // ---------------------------------------------------------------------------
 
 @Preview
@@ -387,10 +429,6 @@ private fun AdBlockToggleButtonDisabledPreview() {
     }
 }
 
-// The toggle confirmation message is previewed as the bare Snackbar rather than
-// the SnackbarHost: with no coroutine driving SnackbarHostState the host renders
-// empty, while the Snackbar it delegates to gives the same pixels from static
-// text.
 @Preview
 @Composable
 private fun ToggleNoticeSnackbarOnPreview() {
@@ -419,14 +457,40 @@ private fun BrowserToolbarPreview() {
             inputText = "https://www.google.com",
             canGoBack = true,
             canGoForward = false,
+            tabCount = 3,
             onInputChange = {},
             onNavigate = {},
             onBack = {},
             onForward = {},
             onRefresh = {},
             onHistory = {},
+            onTabSwitcher = {},
             modelName = "Gemini Nano"
         )
+    }
+}
+
+@Preview
+@Composable
+private fun TabCountButton1Preview() {
+    MaterialTheme {
+        TabCountButton(count = 1, onClick = {})
+    }
+}
+
+@Preview
+@Composable
+private fun TabCountButton5Preview() {
+    MaterialTheme {
+        TabCountButton(count = 5, onClick = {})
+    }
+}
+
+@Preview
+@Composable
+private fun TabCountButton20Preview() {
+    MaterialTheme {
+        TabCountButton(count = 20, onClick = {})
     }
 }
 

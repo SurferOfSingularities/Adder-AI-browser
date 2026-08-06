@@ -7,87 +7,209 @@ import androidx.lifecycle.ViewModel
 import com.adder.shared.UrlUtils
 import com.adder.shared.detection.currentModelName
 import com.adder.shared.engine.HistoryStore
+import com.adder.shared.engine.TabManager
+import com.adder.shared.engine.platformPersistentStore
 import com.adder.shared.model.HistoryEntry
+import com.adder.shared.model.Tab
 
 /**
  * Owns all observable UI state for the browser screen and exposes the intents
- * that drive it. The imperative bridge to the live platform WebView lives in
- * [webViewController]; this ViewModel calls into it and receives events back
- * through the `on*` handlers below.
+ * that drive it. Multi-tab state is delegated to [TabManager]; per-tab
+ * transient UI state (loading, nav, model busy) is held in [tabUiStates].
+ *
+ * Each tab gets its own [WebViewController] instance stored in [tabControllers].
  */
 class BrowserViewModel(
+    private val tabManager: TabManager = TabManager(platformPersistentStore()),
     private val historyStore: HistoryStore = HistoryStore()
 ) : ViewModel() {
 
-    var url by mutableStateOf(INITIAL_URL)
-        private set
-    var inputText by mutableStateOf(INITIAL_URL)
-        private set
-    var canGoBack by mutableStateOf(false)
-        private set
-    var canGoForward by mutableStateOf(false)
-        private set
-    var isLoading by mutableStateOf(false)
-        private set
-    var isModelBusy by mutableStateOf(false)
-        private set
+    // -------------------------------------------------------------------------
+    // Per-tab transient UI state
+    // -------------------------------------------------------------------------
 
     /**
-     * Whether ad blocking is active. When true, page loads run the ad-block
-     * pipeline; when false, pages load untouched ("virgin" view). Persists
-     * across navigation for the lifetime of this ViewModel.
+     * Transient per-tab state not persisted across sessions (loading, nav controls,
+     * model busy). Separate from the persisted [Tab] model.
      */
+    class TabUiState {
+        var isLoading by mutableStateOf(false)
+        var isModelBusy by mutableStateOf(false)
+        var canGoBack by mutableStateOf(false)
+        var canGoForward by mutableStateOf(false)
+        var inputText by mutableStateOf("")
+    }
+
+    private val tabUiStates = mutableMapOf<String, TabUiState>()
+    private val tabControllers = mutableMapOf<String, WebViewController>()
+
+    private fun getOrCreateUiState(tabId: String): TabUiState {
+        return tabUiStates.getOrPut(tabId) {
+            val tab = tabManager.tabs.firstOrNull { it.id == tabId }
+            TabUiState().also { it.inputText = tab?.url ?: INITIAL_URL }
+        }
+    }
+
+    private fun getOrCreateController(tabId: String): WebViewController {
+        return tabControllers.getOrPut(tabId) {
+            WebViewController().also { ctrl ->
+                ctrl.onNewWindowRequest = { targetUrl ->
+                    createTab(targetUrl.ifEmpty { INITIAL_URL })
+                }
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Active tab derived state (what BrowserScreen observes)
+    // -------------------------------------------------------------------------
+
+    private val activeUiState: TabUiState
+        get() = getOrCreateUiState(tabManager.activeTabId)
+
+    /** Current URL of the active tab (from TabManager's persisted state). */
+    val url: String
+        get() = tabManager.activeTab.url
+
+    /** Text shown in the address bar (may differ from [url] while user is typing). */
+    var inputText: String
+        get() = activeUiState.inputText
+        private set(value) { activeUiState.inputText = value }
+
+    val canGoBack: Boolean
+        get() = activeUiState.canGoBack
+
+    val canGoForward: Boolean
+        get() = activeUiState.canGoForward
+
+    val isLoading: Boolean
+        get() = activeUiState.isLoading
+
+    val isModelBusy: Boolean
+        get() = activeUiState.isModelBusy
+
+    /** The active tab's WebViewController. */
+    val webViewController: WebViewController
+        get() = getOrCreateController(tabManager.activeTabId)
+
+    // -------------------------------------------------------------------------
+    // Tab collection state
+    // -------------------------------------------------------------------------
+
+    /** Ordered list of all tabs. */
+    var tabs by mutableStateOf(tabManager.tabs)
+        private set
+
+    /** ID of the currently active tab. */
+    var activeTabId by mutableStateOf(tabManager.activeTabId)
+        private set
+
+    /** Number of open tabs. */
+    val tabCount: Int
+        get() = tabs.size
+
+    /** Whether the tab switcher overlay is visible. */
+    var tabSwitcherVisible by mutableStateOf(false)
+        private set
+
+    // -------------------------------------------------------------------------
+    // Blocking toggle
+    // -------------------------------------------------------------------------
+
     var blockingEnabled by mutableStateOf(true)
         private set
 
-    /**
-     * Pending toggle confirmation message, or `null` when there is nothing to
-     * show. Single-consumption: the screen calls [onToggleNoticeShown] once it
-     * has presented the message. A single nullable slot is what makes "at most
-     * one pending notice" structural rather than enforced — a second
-     * publication overwrites the first because there is nowhere for it to queue.
-     *
-     * Assumption: the screen keys its presenting effect on the notice *value*,
-     * so two consecutive notices must differ. That holds today because the only
-     * producer is [toggleBlocking], a strict flip that always alternates
-     * `Blocking : On` / `Blocking : Off`. If a second producer is ever added
-     * (for example a whitelist rule forcing blocking off), two identical
-     * consecutive messages become possible and this must become an
-     * identity-bearing wrapper, e.g.
-     * `data class ToggleNotice(val message: String, val id: Long)`.
-     */
     var toggleNotice by mutableStateOf<String?>(null)
         private set
 
-    /** Human-readable name of the on-device LLM on this platform. */
+    // -------------------------------------------------------------------------
+    // History
+    // -------------------------------------------------------------------------
+
     val modelName: String = currentModelName()
 
-    /** Imperative command bridge to the live platform WebView. */
-    val webViewController = WebViewController()
-
-    /** Whether the history overlay is currently shown over the page. */
     var historyVisible by mutableStateOf(false)
         private set
 
-    /** Recorded visits, most recent first. Kept in sync with [historyStore]. */
     var historyEntries by mutableStateOf<List<HistoryEntry>>(emptyList())
         private set
 
+    // -------------------------------------------------------------------------
+    // Snackbar notices (shared slot for toggle + tab limit)
+    // -------------------------------------------------------------------------
+
+    var snackbarNotice by mutableStateOf<String?>(null)
+        private set
+
     init {
-        // Surface history persisted by earlier sessions as soon as the screen opens.
         historyEntries = historyStore.entries()
+        // Initialize UI state for the active tab.
+        getOrCreateUiState(tabManager.activeTabId)
+        getOrCreateController(tabManager.activeTabId)
+        syncTabState()
     }
 
-    // --- Intents from the UI ---
+    // -------------------------------------------------------------------------
+    // Tab intents
+    // -------------------------------------------------------------------------
+
+    /**
+     * Creates a new tab, optionally with a specific URL.
+     * Shows a snackbar if the tab limit is reached.
+     */
+    fun createTab(url: String = INITIAL_URL) {
+        val tab = tabManager.createTab(url)
+        if (tab == null) {
+            snackbarNotice = NOTICE_TAB_LIMIT
+            return
+        }
+        syncTabState()
+    }
+
+    /** Closes the tab with [id]. */
+    fun closeTab(id: String) {
+        tabManager.closeTab(id)
+        // Clean up transient state for the closed tab.
+        tabUiStates.remove(id)
+        tabControllers.remove(id)
+        syncTabState()
+    }
+
+    /**
+     * Activates the tab with [id]. If the tab's rendered blocking mode differs
+     * from the current [blockingEnabled], a reload is triggered automatically.
+     */
+    fun activateTab(id: String) {
+        if (tabManager.tabs.none { it.id == id }) return
+        tabManager.activateTab(id)
+        syncTabState()
+
+        // Lazy reconciliation: reload if blocking mode is stale.
+        val tab = tabManager.activeTab
+        if (tab.renderedBlockingMode != null && tab.renderedBlockingMode != blockingEnabled) {
+            getOrCreateController(id).reload()
+        }
+    }
+
+    fun openTabSwitcher() {
+        tabSwitcherVisible = true
+    }
+
+    fun closeTabSwitcher() {
+        tabSwitcherVisible = false
+    }
+
+    // -------------------------------------------------------------------------
+    // Browser intents (dispatched to active tab)
+    // -------------------------------------------------------------------------
 
     fun onInputChange(text: String) {
-        inputText = text
+        activeUiState.inputText = text
     }
 
     fun onUrlSubmit() {
-        val normalized = UrlUtils.normalizeUrl(inputText)
-        url = normalized
-        inputText = normalized
+        val normalized = UrlUtils.normalizeUrl(activeUiState.inputText)
+        activeUiState.inputText = normalized
         webViewController.loadUrl(normalized)
     }
 
@@ -97,94 +219,108 @@ class BrowserViewModel(
 
     fun onRefresh() = webViewController.reload()
 
-    /**
-     * Flips ad blocking on/off, publishes the confirmation message for the new
-     * state, and reloads the current page so the new mode takes effect. Blocked
-     * mode runs the pipeline; virgin mode skips it.
-     */
     fun toggleBlocking() {
         blockingEnabled = !blockingEnabled
-        // Derived *after* the flip, so the message names the state this tap
-        // produced rather than the one it replaced.
         toggleNotice = if (blockingEnabled) NOTICE_BLOCKING_ON else NOTICE_BLOCKING_OFF
-        // Imperative side effect on the live WebView; reads neither piece of
-        // state above, so it goes last.
         webViewController.reload()
     }
 
-    /** Marks the pending [toggleNotice] as presented, so it is shown only once. */
     fun onToggleNoticeShown() {
         toggleNotice = null
     }
 
-    // --- History intents ---
+    fun onSnackbarNoticeShown() {
+        snackbarNotice = null
+    }
 
-    /** Opens the history overlay, refreshing the list first. */
+    // -------------------------------------------------------------------------
+    // History intents
+    // -------------------------------------------------------------------------
+
     fun openHistory() {
         historyEntries = historyStore.entries()
         historyVisible = true
     }
 
-    /** Dismisses the history overlay. The loaded page is left untouched. */
     fun closeHistory() {
         historyVisible = false
     }
 
-    /** Closes history and navigates to the selected entry's URL. */
     fun onRevisit(entry: HistoryEntry) {
         historyVisible = false
-        url = entry.url
-        inputText = entry.url
+        activeUiState.inputText = entry.url
         webViewController.loadUrl(entry.url)
     }
 
-    /** Removes a single entry from history. Harmless if it is already gone. */
     fun onDeleteHistory(entry: HistoryEntry) {
         historyStore.delete(entry.url)
         historyEntries = historyStore.entries()
     }
 
-    /** Removes every history entry. */
     fun onClearHistory() {
         historyStore.clear()
         historyEntries = historyStore.entries()
     }
 
-    // --- Events reported by the platform WebView ---
+    // -------------------------------------------------------------------------
+    // Events reported by the platform WebView (routed by tabId)
+    // -------------------------------------------------------------------------
 
-    fun onPageStarted(newUrl: String) {
-        isLoading = true
-        isModelBusy = false
-        inputText = newUrl
+    fun onPageStarted(tabId: String, newUrl: String) {
+        val state = getOrCreateUiState(tabId)
+        state.isLoading = true
+        state.isModelBusy = false
+        state.inputText = newUrl
     }
 
-    fun onPageFinished(newUrl: String) {
-        isLoading = false
-        inputText = newUrl
+    fun onPageFinished(tabId: String, newUrl: String) {
+        val state = getOrCreateUiState(tabId)
+        state.isLoading = false
+        state.inputText = newUrl
 
-        // The WebView only reports this for completed loads, so failed navigations
-        // are excluded from history without extra handling.
+        // Update persisted tab metadata.
+        val title = getOrCreateController(tabId).currentTitle().orEmpty()
+        tabManager.updateTab(tabId, newUrl, title, blockingEnabled)
+        syncTabState()
+
+        // Record in unified history regardless of which tab finished.
         if (HistoryStore.isRecordable(newUrl)) {
-            historyStore.record(newUrl, webViewController.currentTitle().orEmpty())
+            historyStore.record(newUrl, title)
             historyEntries = historyStore.entries()
         }
     }
 
-    fun onNavStateChanged(canGoBack: Boolean, canGoForward: Boolean) {
-        this.canGoBack = canGoBack
-        this.canGoForward = canGoForward
+    fun onNavStateChanged(tabId: String, canGoBack: Boolean, canGoForward: Boolean) {
+        val state = getOrCreateUiState(tabId)
+        state.canGoBack = canGoBack
+        state.canGoForward = canGoForward
     }
 
-    fun onModelBusyChanged(busy: Boolean) {
-        isModelBusy = busy
+    fun onModelBusyChanged(tabId: String, busy: Boolean) {
+        val state = getOrCreateUiState(tabId)
+        state.isModelBusy = busy
+    }
+
+    // -------------------------------------------------------------------------
+    // Convenience: controller for a specific tab (used by BrowserScreen)
+    // -------------------------------------------------------------------------
+
+    fun controllerForTab(tabId: String): WebViewController = getOrCreateController(tabId)
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    /** Synchronizes the Compose-observable [tabs] and [activeTabId] from TabManager. */
+    private fun syncTabState() {
+        tabs = tabManager.tabs
+        activeTabId = tabManager.activeTabId
     }
 
     private companion object {
         const val INITIAL_URL = "https://www.google.com"
-
-        // Exact wording, spaces around the colon included, so the literals live
-        // in one place.
         const val NOTICE_BLOCKING_ON = "Blocking : On"
         const val NOTICE_BLOCKING_OFF = "Blocking : Off"
+        const val NOTICE_TAB_LIMIT = "Tab limit reached (20)"
     }
 }

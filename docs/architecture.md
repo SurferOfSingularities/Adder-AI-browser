@@ -42,11 +42,76 @@ This keeps the destructive removal strategy intact while giving a clean on/off s
 
 The browser screen follows an MVVM-style unidirectional data flow:
 
-- **`BrowserViewModel`** (`androidx.lifecycle.ViewModel`, in `commonMain`) owns all observable UI state (`url`, `inputText`, `canGoBack`, `canGoForward`, `isLoading`, `isModelBusy`, `blockingEnabled`, `toggleNotice`, `modelName`) as Compose `mutableStateOf` and exposes intents (`onUrlSubmit`, `onBack`, `toggleBlocking`, `onToggleNoticeShown`, etc.). It is obtained in the composable via the multiplatform `viewModel { }` factory.
-- **`WebViewController`** is a thin, state-free imperative bridge to the live platform WebView. The platform WebView registers its command handlers (`loadUrl`/`goBack`/`goForward`/`reload`) on creation; the ViewModel invokes them. This separation exists because those commands are tied to the live WebView instance and its composition lifecycle, so they should not live in a lifecycle-scoped ViewModel.
-- **`PlatformWebView`** takes the controller plus `blockingEnabled` and reports events back to the ViewModel through callbacks (`onPageStarted`, `onPageFinished`, `onNavStateChanged`, `onModelBusyChanged`) rather than mutating shared state directly.
+- **`BrowserViewModel`** (`androidx.lifecycle.ViewModel`, in `commonMain`) owns all observable UI state and exposes intents. It delegates tab collection management to `TabManager` and holds per-tab transient UI state (loading, nav controls, model busy) in a `TabUiState` map. Public properties (`url`, `inputText`, `isLoading`, etc.) are derived from the active tab's state. It is obtained in the composable via the multiplatform `viewModel { }` factory.
+- **`TabManager`** (in `commonMain`) owns the persisted tab collection and its invariants: creation, closing, activation, ordering, live-WebView budgeting, and session persistence to `PersistentStore`. It is a constructor dependency of `BrowserViewModel`.
+- **`WebViewController`** is a thin, state-free imperative bridge to a live platform WebView. Each tab gets its own `WebViewController` instance, stored in the ViewModel's controller map. The platform WebView registers its command handlers (`loadUrl`/`goBack`/`goForward`/`reload`) on creation; the ViewModel invokes them. It also exposes `onNewWindowRequest` for intercepting `target="_blank"` / `window.open()` navigations.
+- **`PlatformWebView`** takes the controller plus `blockingEnabled` and reports events back to the ViewModel through callbacks (`onPageStarted`, `onPageFinished`, `onNavStateChanged`, `onModelBusyChanged`). Events are routed by `tabId` so background-tab loads don't pollute the active tab's UI.
+- **`AdBlockScheduler`** ensures at most one classification pass runs at a time across all tabs, with active-tab priority preemption. Background tab passes are queued and drained FIFO.
 
 This gives a single source of truth for state, keeps navigation/intent logic out of composables, and survives Android configuration changes.
+
+## Multi-Tab Architecture
+
+### Tab Data Model
+
+`Tab` (`@Serializable` data class in `com.adder.shared.model`):
+- `id: String` — unique identifier (UUID)
+- `url: String` — current URL
+- `displayTitle: String` — page title or URL fallback (max 512 chars)
+- `renderedBlockingMode: Boolean?` — blocking mode when page last finished loading
+
+### TabManager
+
+`TabManager` (in `com.adder.shared.engine`) owns:
+- Ordered `tabs: List<Tab>` (position 0 = leftmost)
+- `activeTabId: String` — always refers to a tab in the collection
+- `recentlyActivated: List<String>` — MRU list for WebView budgeting
+
+Key operations:
+- `createTab(url)` — appends to end, activates, returns null at limit (20)
+- `closeTab(id)` — removes, picks successor (higher position first, then lower), creates fresh if last
+- `activateTab(id)` — sets active, pushes to MRU front
+- `updateTab(tabId, url, title, mode)` — updates persisted metadata
+- `liveTabIds()` — active + top 2 MRU = max 3 live WebViews
+
+### Tab Session Persistence
+
+`TabSession` (`@Serializable`) wraps `tabs` + `activeTabId`. Stored under key `"adder.tab_session.v1"` via `PersistentStore`. Persisted after every mutation. Restoration on launch applies fallback rules (empty/corrupt → fresh tab; >20 → trim).
+
+### AdBlockScheduler
+
+Ensures single-pass-at-a-time semantics:
+- Active tab preempts running background passes
+- Background requests queued FIFO
+- `cancelForTab(tabId)` removes running or queued passes for closed tabs
+- `isModelBusy` only reflects the active tab's pass
+
+### Blocking Mode Across Tabs
+
+- `blockingEnabled` is a global (per-session) flag
+- Each tab stores `renderedBlockingMode` on page finish
+- On activation, if `renderedBlockingMode != blockingEnabled`, the tab is reloaded (lazy reconciliation)
+- Toggle only reloads the active tab; background tabs reconcile when activated
+
+### Tab Switcher
+
+`TabSwitcherView` — full-screen overlay (same pattern as `HistoryView`):
+- Top bar: close button, "Tabs" title, "+" new-tab button
+- `LazyColumn` of tab rows: bold title, URL, close X, left accent bar for active tab
+- Defined in `commonMain`, shared across both platforms
+
+### Toolbar
+
+- 3-dot `MoreVert` menu (History, Settings, model name)
+- Back / Forward / Refresh buttons
+- URL `OutlinedTextField`
+- `TabCountButton` — rounded rect showing tab count, opens tab switcher
+
+### New-Window Handling
+
+- Android: `WebChromeClient.onCreateWindow()` extracts URL → `createTab(url)`
+- iOS: `WKUIDelegate.webView(_:createWebViewWith:for:windowFeatures:)` → `createTab(url)`
+- Both delegate to `WebViewController.onNewWindowRequest`
 
 ## Shared Module Ownership
 

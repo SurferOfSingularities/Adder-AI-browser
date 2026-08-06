@@ -14,6 +14,13 @@ class WebViewController {
     internal var onReload: (() -> Unit)? = null
     internal var onCurrentTitle: (() -> String?)? = null
 
+    /**
+     * Callback invoked by the platform WebView when a page requests a new window
+     * (e.g. `target="_blank"` or `window.open()`). The ViewModel wires this to
+     * [BrowserViewModel.createTab] so the URL opens in a new tab.
+     */
+    var onNewWindowRequest: ((url: String) -> Unit)? = null
+
     fun loadUrl(url: String) {
         onLoadUrl?.invoke(url)
     }
@@ -33,7 +40,7 @@ class WebViewController {
     /**
      * The title of the page currently loaded in the WebView, or null when no
      * WebView is attached or the page reports no title. Used to label history
-     * entries.
+     * entries and tab display titles.
      */
     fun currentTitle(): String? = onCurrentTitle?.invoke()
 }

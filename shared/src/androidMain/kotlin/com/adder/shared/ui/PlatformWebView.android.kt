@@ -2,6 +2,8 @@ package com.adder.shared.ui
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Message
 import android.util.Log
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -36,9 +38,11 @@ actual fun PlatformWebView(
     val scope = rememberCoroutineScope()
     val adBlockEngine = remember { AdBlockEngine(LlmClassifier()) }
     var pipelineJob by remember { mutableStateOf<Job?>(null) }
-    // Read the latest toggle value inside the WebView's long-lived callbacks
-    // (the factory closure would otherwise capture a stale value).
     val currentBlockingEnabled by rememberUpdatedState(blockingEnabled)
+    val currentOnPageStarted by rememberUpdatedState(onPageStarted)
+    val currentOnPageFinished by rememberUpdatedState(onPageFinished)
+    val currentOnNavStateChanged by rememberUpdatedState(onNavStateChanged)
+    val currentOnModelBusyChanged by rememberUpdatedState(onModelBusyChanged)
 
     AndroidView(
         factory = { context ->
@@ -49,6 +53,7 @@ actual fun PlatformWebView(
                 settings.useWideViewPort = true
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
+                settings.setSupportMultipleWindows(true)
 
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(
@@ -59,8 +64,7 @@ actual fun PlatformWebView(
                     override fun onPageStarted(view: WebView?, pageUrl: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, pageUrl, favicon)
                         pipelineJob?.cancel()
-                        pageUrl?.let { onPageStarted(it) }
-                        // Inject early CSS only when blocking is enabled
+                        pageUrl?.let { currentOnPageStarted(it) }
                         if (currentBlockingEnabled) {
                             view?.evaluateJavascript(EarlyCssInjector.earlyHideCss, null)
                         }
@@ -68,24 +72,55 @@ actual fun PlatformWebView(
 
                     override fun onPageFinished(view: WebView?, pageUrl: String?) {
                         super.onPageFinished(view, pageUrl)
-                        pageUrl?.let { onPageFinished(it) }
-                        onNavStateChanged(
+                        pageUrl?.let { currentOnPageFinished(it) }
+                        currentOnNavStateChanged(
                             view?.canGoBack() ?: false,
                             view?.canGoForward() ?: false
                         )
 
-                        // Run ad blocking pipeline only when blocking is enabled
                         if (currentBlockingEnabled) {
                             view?.let { wv ->
                                 pipelineJob = scope.launch {
-                                    runAdBlockPipeline(wv, adBlockEngine, pageUrl ?: "", onModelBusyChanged)
+                                    runAdBlockPipeline(wv, adBlockEngine, pageUrl ?: "", currentOnModelBusyChanged)
                                 }
                             }
                         }
                     }
                 }
 
-                webChromeClient = WebChromeClient()
+                webChromeClient = object : WebChromeClient() {
+                    override fun onCreateWindow(
+                        view: WebView?,
+                        isDialog: Boolean,
+                        isUserGesture: Boolean,
+                        resultMsg: Message?
+                    ): Boolean {
+                        // Extract the URL from the hit test result for target="_blank" links.
+                        val hitUrl = view?.hitTestResult?.extra
+                        if (!hitUrl.isNullOrEmpty()) {
+                            controller.onNewWindowRequest?.invoke(hitUrl)
+                        } else {
+                            // Fallback: create a temporary WebView to capture the redirect URL.
+                            val tempWebView = WebView(view?.context ?: context)
+                            tempWebView.webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(
+                                    view: WebView?,
+                                    request: WebResourceRequest?
+                                ): Boolean {
+                                    request?.url?.toString()?.let { targetUrl ->
+                                        controller.onNewWindowRequest?.invoke(targetUrl)
+                                    }
+                                    return true
+                                }
+                            }
+                            val transport = resultMsg?.obj as? WebView.WebViewTransport
+                            transport?.webView = tempWebView
+                            resultMsg?.sendToTarget()
+                            return true
+                        }
+                        return false
+                    }
+                }
 
                 // Wire imperative commands to the controller
                 controller.onLoadUrl = { loadUrl(it) }
@@ -111,7 +146,6 @@ private suspend fun runAdBlockPipeline(
 ) {
     try {
         onModelBusyChanged(true)
-        // Extract DOM elements
         val jsonResult = evaluateJsAsync(webView, DomExtractor.extractionScript)
         val elements = parseExtractedElements(unescapeJsString(jsonResult))
         Log.d(TAG, "Extracted ${elements.size} candidate elements")
@@ -121,7 +155,6 @@ private suspend fun runAdBlockPipeline(
             return
         }
 
-        // Run pipeline
         val result = engine.runPipeline(elements, pageUrl)
         if (result.skipped || result.selectorsToRemove.isEmpty()) {
             Log.d(TAG, if (result.skipped) "Whitelisted" else "No ads found")
@@ -131,11 +164,9 @@ private suspend fun runAdBlockPipeline(
 
         Log.d(TAG, "Removing ${result.selectorsToRemove.size} ads (${result.heuristicRemovals} heuristic, ${result.llmRemovals} LLM)")
 
-        // Remove ads
         val removalScript = DomRemover.buildRemovalScript(result.selectorsToRemove)
         evaluateJsAsync(webView, removalScript)
 
-        // Install MutationObserver
         val observerScript = DomRemover.buildMutationObserverScript(DomRemover.defaultObserverPatterns)
         evaluateJsAsync(webView, observerScript)
     } catch (e: Exception) {

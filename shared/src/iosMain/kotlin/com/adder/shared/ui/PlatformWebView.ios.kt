@@ -30,36 +30,46 @@ actual fun PlatformWebView(
 ) {
     val scope = rememberCoroutineScope()
     val adBlockEngine = remember { AdBlockEngine(LlmClassifier()) }
-    // Read the latest toggle value inside the WebView's long-lived callbacks
-    // (the factory closure would otherwise capture a stale value).
     val currentBlockingEnabled by rememberUpdatedState(blockingEnabled)
+    val currentOnPageStarted by rememberUpdatedState(onPageStarted)
+    val currentOnPageFinished by rememberUpdatedState(onPageFinished)
+    val currentOnNavStateChanged by rememberUpdatedState(onNavStateChanged)
+    val currentOnModelBusyChanged by rememberUpdatedState(onModelBusyChanged)
 
     UIKitView(
         factory = {
-            val config = WKWebViewConfiguration()
+            val config = WKWebViewConfiguration().apply {
+                preferences.javaScriptEnabled = true
+            }
             val webView = WKWebView(frame = kotlinx.cinterop.cValue { }, configuration = config)
 
             val navigationDelegate = WebViewNavigationDelegate(
                 onStart = { pageUrl ->
-                    onPageStarted(pageUrl)
-                    // Inject early CSS only when blocking is enabled
+                    currentOnPageStarted(pageUrl)
                     if (currentBlockingEnabled) {
                         webView.evaluateJavaScript(EarlyCssInjector.earlyHideCss, null)
                     }
                 },
                 onFinish = { pageUrl ->
-                    onPageFinished(pageUrl)
-                    onNavStateChanged(webView.canGoBack, webView.canGoForward)
+                    currentOnPageFinished(pageUrl)
+                    currentOnNavStateChanged(webView.canGoBack, webView.canGoForward)
 
-                    // Run ad blocking pipeline only when blocking is enabled
                     if (currentBlockingEnabled) {
                         scope.launch {
-                            runIosAdBlockPipeline(webView, adBlockEngine, pageUrl, onModelBusyChanged)
+                            runIosAdBlockPipeline(webView, adBlockEngine, pageUrl, currentOnModelBusyChanged)
                         }
                     }
                 }
             )
             webView.navigationDelegate = navigationDelegate
+
+            val uiDelegate = WebViewUIDelegate(
+                onNewWindow = { targetUrl ->
+                    controller.onNewWindowRequest?.invoke(targetUrl)
+                }
+            )
+            webView.UIDelegate = uiDelegate
+
             webView.allowsBackForwardNavigationGestures = true
 
             // Wire imperative commands to the controller
@@ -92,7 +102,6 @@ private suspend fun runIosAdBlockPipeline(
 ) {
     try {
         onModelBusyChanged(true)
-        // Extract DOM elements
         val jsonResult = evaluateJsAsyncIos(webView, DomExtractor.extractionScript)
         val elements = parseExtractedElements(jsonResult)
 
@@ -101,18 +110,15 @@ private suspend fun runIosAdBlockPipeline(
             return
         }
 
-        // Run pipeline
         val result = engine.runPipeline(elements, pageUrl)
         if (result.skipped || result.selectorsToRemove.isEmpty()) {
             onModelBusyChanged(false)
             return
         }
 
-        // Remove ads
         val removalScript = DomRemover.buildRemovalScript(result.selectorsToRemove)
         evaluateJsAsyncIos(webView, removalScript)
 
-        // Install MutationObserver
         val observerScript = DomRemover.buildMutationObserverScript(DomRemover.defaultObserverPatterns)
         evaluateJsAsyncIos(webView, observerScript)
     } catch (e: Exception) {
@@ -150,5 +156,28 @@ private class WebViewNavigationDelegate(
     ) {
         val url = webView.URL?.absoluteString ?: ""
         onFinish(url)
+    }
+}
+
+/**
+ * WKUIDelegate that intercepts new-window requests (target="_blank", window.open).
+ */
+private class WebViewUIDelegate(
+    private val onNewWindow: (String) -> Unit
+) : NSObject(), WKUIDelegateProtocol {
+
+    override fun webView(
+        webView: WKWebView,
+        createWebViewWithConfiguration: WKWebViewConfiguration,
+        forNavigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ): WKWebView? {
+        // Extract URL from the navigation action and open it in a new tab.
+        val targetUrl = forNavigationAction.request.URL?.absoluteString
+        if (!targetUrl.isNullOrEmpty()) {
+            onNewWindow(targetUrl)
+        }
+        // Return null — we don't create a new WKWebView; the tab system handles it.
+        return null
     }
 }
