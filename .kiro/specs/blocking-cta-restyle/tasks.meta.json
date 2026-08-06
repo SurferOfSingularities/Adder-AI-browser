@@ -1,0 +1,346 @@
+{
+  "pbtResults": {
+    "6.2 Verify the two architecture docs are identical in the edited regions": {
+      "status": "passed",
+      "lastRunTimestamp": 1785538958968
+    },
+    "5.2 Verify colors are a function of blocking state alone": {
+      "status": "passed",
+      "lastRunTimestamp": 1785539707862
+    },
+    "5.3 Verify the content description always names the blocking state": {
+      "status": "passed",
+      "lastRunTimestamp": 1785539719488
+    },
+    "5.4 Verify a tap's effects depend only on the enabled flag": {
+      "status": "passed",
+      "lastRunTimestamp": 1785539722366
+    }
+  },
+  "executionHistory": {
+    "1.1 Add fixed color constants for both blocking states": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538513534
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538532698
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538791460
+      }
+    ],
+    "1.2 Rewrite `AdBlockTogglePill` as `AdBlockToggleButton`": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538513879
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538801194
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538975121
+      }
+    ],
+    "1.3 Update the `BrowserScreen` call site": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538513905
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538988172
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539061297
+      }
+    ],
+    "2.1 Add the single-consumption `toggleNotice` state and wire it into `toggleBlocking()`": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538513929
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538535624
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538794369
+      }
+    ],
+    "2.2 Verify the notice always names the post-flip state": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538513948
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538805066
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538979172
+      }
+    ],
+    "2.3 Verify at most one notice is ever pending": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538513973
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538807726
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538982033
+      }
+    ],
+    "3.1 Add the snackbar host state and the presenting effect": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538513994
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539064511
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539116485
+      }
+    ],
+    "3.2 Declare the `SnackbarHost` inside the WebView area": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538514014
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539119462
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539197389
+      }
+    ],
+    "3.3 Verify the presented snackbar survives the reload": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538514033
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539379664
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539749261
+      }
+    ],
+    "4. Checkpoint - compile and review": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538514065
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539200516
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539312766
+      }
+    ],
+    "5.1 Add the two toggle-notice snackbar previews": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538514086
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539315638
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539376380
+      }
+    ],
+    "5.2 Verify colors are a function of blocking state alone": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538514106
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539382631
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539752606
+      }
+    ],
+    "5.3 Verify the content description always names the blocking state": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538514129
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539385369
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539755690
+      }
+    ],
+    "5.4 Verify a tap's effects depend only on the enabled flag": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538514154
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539388256
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539758437
+      }
+    ],
+    "6.1 Replace the toggle section and ViewModel bullet in both architecture docs": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538514173
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538538220
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538796992
+      }
+    ],
+    "6.2 Verify the two architecture docs are identical in the edited regions": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538514195
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538810397
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538985001
+      }
+    ],
+    "7. Final checkpoint - review the full change set": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538514215
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539761544
+      },
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539887525
+      }
+    ],
+    "2. Publish the toggle notice from the ViewModel": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538982072
+      }
+    ],
+    "6. Sync the architecture documentation": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785538985035
+      }
+    ],
+    "1. Restyle the ad-blocking control": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539061320
+      }
+    ],
+    "3. Present the notice as a snackbar in `BrowserScreen`": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539749293
+      }
+    ],
+    "5. Preview coverage and toggle property verification": [
+      {
+        "executionId": "de458ffc-c601-4563-bbc6-ee5a6a295785",
+        "chatSessionId": "sess_b83d2cc9-a60c-4378-b7cc-69f9e38683d8",
+        "timestamp": 1785539758472
+      }
+    ]
+  }
+}
