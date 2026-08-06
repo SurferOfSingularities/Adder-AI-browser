@@ -126,7 +126,8 @@ class BrowserViewModel(
     // History
     // -------------------------------------------------------------------------
 
-    val modelName: String = currentModelName()
+    var modelName by mutableStateOf(currentModelName())
+        private set
 
     var historyVisible by mutableStateOf(false)
         private set
@@ -233,6 +234,11 @@ class BrowserViewModel(
         snackbarNotice = null
     }
 
+    /** Re-reads the platform model name (may have changed after LLM availability check). */
+    fun refreshModelName() {
+        modelName = currentModelName()
+    }
+
     // -------------------------------------------------------------------------
     // History intents
     // -------------------------------------------------------------------------
@@ -282,6 +288,9 @@ class BrowserViewModel(
         val title = getOrCreateController(tabId).currentTitle().orEmpty()
         tabManager.updateTab(tabId, newUrl, title, blockingEnabled)
         syncTabState()
+
+        // Refresh model name in case LLM availability was resolved during this page load.
+        refreshModelName()
 
         // Record in unified history regardless of which tab finished.
         if (HistoryStore.isRecordable(newUrl)) {

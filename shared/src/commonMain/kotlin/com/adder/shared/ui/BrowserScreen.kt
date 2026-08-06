@@ -1,5 +1,8 @@
 package com.adder.shared.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -23,6 +26,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 /**
@@ -83,15 +87,23 @@ fun BrowserScreen(
                     )
                 }
 
-                // Floating ad-blocking toggle button
-                AdBlockToggleButton(
-                    blockingEnabled = viewModel.blockingEnabled,
-                    enabled = !viewModel.isLoading && !viewModel.isModelBusy,
-                    onToggle = viewModel::toggleBlocking,
+                // Floating model name popup + ad-blocking toggle button
+                Column(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(bottom = 24.dp, end = 24.dp)
-                )
+                        .padding(bottom = 24.dp, end = 24.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    key(currentTabId) {
+                        ModelNamePopup(modelName = viewModel.modelName)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    AdBlockToggleButton(
+                        blockingEnabled = viewModel.blockingEnabled,
+                        enabled = !viewModel.isLoading && !viewModel.isModelBusy,
+                        onToggle = viewModel::toggleBlocking
+                    )
+                }
 
                 // Snackbar host for notices
                 SnackbarHost(
@@ -218,6 +230,43 @@ private fun AdBlockToggleButton(
                 .padding(12.dp)
                 .size(24.dp)
         )
+    }
+}
+
+/**
+ * Transient popup that displays the on-device LLM model name.
+ * Fades in on composition, stays visible for ~2 seconds, then fades out.
+ */
+@Composable
+private fun ModelNamePopup(
+    modelName: String,
+    modifier: Modifier = Modifier
+) {
+    var showPopup by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        delay(2000L)
+        showPopup = false
+    }
+
+    AnimatedVisibility(
+        visible = showPopup,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shadowElevation = 4.dp
+        ) {
+            Text(
+                text = modelName,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+            )
+        }
     }
 }
 
@@ -499,5 +548,21 @@ private fun TabCountButton20Preview() {
 private fun AppMenuPreview() {
     MaterialTheme {
         AppMenu(modelName = "Gemini Nano", onHistory = {})
+    }
+}
+
+@Preview
+@Composable
+private fun ModelNamePopupPreview() {
+    MaterialTheme {
+        ModelNamePopup(modelName = "Gemini Nano")
+    }
+}
+
+@Preview
+@Composable
+private fun ModelNamePopupLongNamePreview() {
+    MaterialTheme {
+        ModelNamePopup(modelName = "Apple Intelligence")
     }
 }

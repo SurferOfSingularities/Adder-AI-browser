@@ -15,6 +15,12 @@ private const val TAG = "LlmClassifier"
  */
 actual class LlmClassifier actual constructor() {
 
+    companion object {
+        /** Dynamically resolved model name, updated by [isAvailable]. */
+        var cachedModelName: String = "Gemini Nano"
+            private set
+    }
+
     private var generativeModel: GenerativeModel? = null
     private var available: Boolean? = null
 
@@ -30,6 +36,7 @@ actual class LlmClassifier actual constructor() {
                     FeatureStatus.AVAILABLE -> {
                         generativeModel = model
                         available = true
+                        cachedModelName = "Gemini Nano"
                         Log.d(TAG, "Gemini Nano available and ready")
                         true
                     }
@@ -41,17 +48,20 @@ actual class LlmClassifier actual constructor() {
                         // After download, check again
                         generativeModel = model
                         available = true
+                        cachedModelName = "Gemini Nano"
                         true
                     }
                     else -> {
                         Log.w(TAG, "Gemini Nano not available: status=$status")
                         available = false
+                        cachedModelName = "Heuristic Only"
                         false
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error checking LLM availability", e)
                 available = false
+                cachedModelName = "Heuristic Only"
                 false
             }
         }

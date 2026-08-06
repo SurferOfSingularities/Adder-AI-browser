@@ -9,13 +9,21 @@ import com.adder.shared.model.DomElement
  */
 actual class LlmClassifier actual constructor() {
 
+    companion object {
+        /** Dynamically resolved model name, updated by [isAvailable]. */
+        var cachedModelName: String = "Apple Intelligence"
+            private set
+    }
+
     /**
      * Swift-side classifier that gets set from the iOS app layer.
      */
     var swiftClassifier: IosLlmClassifierDelegate? = null
 
     actual suspend fun isAvailable(): Boolean {
-        return swiftClassifier?.isAvailable() ?: false
+        val available = swiftClassifier?.isAvailable() ?: false
+        cachedModelName = if (available) "Apple Intelligence" else "Heuristic Only"
+        return available
     }
 
     actual suspend fun classifyElements(elements: List<DomElement>): List<Boolean> {
