@@ -36,14 +36,14 @@ class BrowserViewModelHistoryPropertyTest {
                 val webView = RecordingWebView(viewModel.webViewController)
 
                 viewModel.openHistory()
-                val entry = viewModel.historyEntries.single { it.url == url }
+                val entry = viewModel.uiState.value.historyEntries.single { it.url == url }
 
                 viewModel.onRevisit(entry)
 
                 webView.loadedUrls shouldBe listOf(entry.url)
-                viewModel.historyVisible shouldBe false
-                viewModel.url shouldBe entry.url
-                viewModel.inputText shouldBe entry.url
+                viewModel.uiState.value.historyVisible shouldBe false
+                viewModel.uiState.value.url shouldBe entry.url
+                viewModel.uiState.value.inputText shouldBe entry.url
             }
         }
 }

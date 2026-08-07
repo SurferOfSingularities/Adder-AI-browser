@@ -25,42 +25,91 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.adder.shared.model.HistoryEntry
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 /**
  * Main browser screen composable — shared across Android and iOS.
  * Contains the URL bar, navigation buttons, tab count, and a platform-specific WebView.
- * All UI state is hoisted into [BrowserViewModel].
+ * All UI state is hoisted into [BrowserViewModel] and observed via a single [StateFlow].
  */
 @Composable
 fun BrowserScreen(
     viewModel: BrowserViewModel = viewModel { BrowserViewModel() }
 ) {
-    val snackbarHostState = remember { SnackbarHostState() }
-    val toggleNotice = viewModel.toggleNotice
-    val snackbarNotice = viewModel.snackbarNotice
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    BrowserScreenContent(
+        state = state,
+        webViewController = viewModel.webViewController,
+        onInputChange = viewModel::onInputChange,
+        onNavigate = viewModel::onUrlSubmit,
+        onBack = viewModel::onBack,
+        onForward = viewModel::onForward,
+        onRefresh = viewModel::onRefresh,
+        onToggleBlocking = viewModel::toggleBlocking,
+        onToggleNoticeShown = viewModel::onToggleNoticeShown,
+        onSnackbarNoticeShown = viewModel::onSnackbarNoticeShown,
+        onPageStarted = viewModel::onPageStarted,
+        onPageFinished = viewModel::onPageFinished,
+        onNavStateChanged = viewModel::onNavStateChanged,
+        onModelBusyChanged = viewModel::onModelBusyChanged,
+        onOpenHistory = viewModel::openHistory,
+        onCloseHistory = viewModel::closeHistory,
+        onRevisit = viewModel::onRevisit,
+        onDeleteHistory = viewModel::onDeleteHistory,
+        onClearHistory = viewModel::onClearHistory,
+        onOpenTabSwitcher = viewModel::openTabSwitcher,
+        onCloseTabSwitcher = viewModel::closeTabSwitcher,
+        onTabSelected = { id ->
+            viewModel.closeTabSwitcher()
+            viewModel.activateTab(id)
+        },
+        onTabClose = viewModel::closeTab,
+        onNewTab = viewModel::createTab
+    )
+}
 
-    // Toggle confirmation message.
-    LaunchedEffect(toggleNotice) {
-        if (toggleNotice != null) {
-            snackbarHostState.showSnackbar(
-                message = toggleNotice,
-                duration = SnackbarDuration.Short
-            )
-            viewModel.onToggleNoticeShown()
-        }
-    }
+@Composable
+private fun BrowserScreenContent(
+    state: BrowserScreenUiState,
+    webViewController: WebViewController,
+    onInputChange: (String) -> Unit,
+    onNavigate: () -> Unit,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    onRefresh: () -> Unit,
+    onToggleBlocking: () -> Unit,
+    onToggleNoticeShown: () -> Unit,
+    onSnackbarNoticeShown: () -> Unit,
+    onPageStarted: (String, String) -> Unit,
+    onPageFinished: (String, String) -> Unit,
+    onNavStateChanged: (String, Boolean, Boolean) -> Unit,
+    onModelBusyChanged: (String, Boolean) -> Unit,
+    onOpenHistory: () -> Unit,
+    onCloseHistory: () -> Unit,
+    onRevisit: (HistoryEntry) -> Unit,
+    onDeleteHistory: (HistoryEntry) -> Unit,
+    onClearHistory: () -> Unit,
+    onOpenTabSwitcher: () -> Unit,
+    onCloseTabSwitcher: () -> Unit,
+    onTabSelected: (String) -> Unit,
+    onTabClose: (String) -> Unit,
+    onNewTab: () -> Unit
+) {
 
-    // General snackbar notices (tab limit, etc.).
-    LaunchedEffect(snackbarNotice) {
-        if (snackbarNotice != null) {
-            snackbarHostState.showSnackbar(
-                message = snackbarNotice,
-                duration = SnackbarDuration.Short
-            )
-            viewModel.onSnackbarNoticeShown()
+    // Merge toggle + general notices into a single toast message slot.
+    // Toggle notice takes priority; a new notice replaces an existing one.
+    val activeToast = state.toggleNotice ?: state.snackbarNotice
+
+    // Auto-dismiss: clear the notice after a short delay.
+    LaunchedEffect(activeToast) {
+        if (activeToast != null) {
+            delay(2000L)
+            if (state.toggleNotice != null) onToggleNoticeShown()
+            if (state.snackbarNotice != null) onSnackbarNoticeShown()
         }
     }
 
@@ -73,17 +122,17 @@ fun BrowserScreen(
             // WebView area — keyed by activeTabId so switching tabs re-composes
             // with the correct controller and URL.
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                val currentTabId = viewModel.activeTabId
+                val currentTabId = state.activeTabId
                 key(currentTabId) {
                     PlatformWebView(
-                        url = viewModel.url,
-                        controller = viewModel.webViewController,
-                        blockingEnabled = viewModel.blockingEnabled,
+                        url = state.url,
+                        controller = webViewController,
+                        blockingEnabled = state.blockingEnabled,
                         modifier = Modifier.fillMaxSize(),
-                        onPageStarted = { url -> viewModel.onPageStarted(currentTabId, url) },
-                        onPageFinished = { url -> viewModel.onPageFinished(currentTabId, url) },
-                        onNavStateChanged = { back, fwd -> viewModel.onNavStateChanged(currentTabId, back, fwd) },
-                        onModelBusyChanged = { busy -> viewModel.onModelBusyChanged(currentTabId, busy) }
+                        onPageStarted = { url -> onPageStarted(currentTabId, url) },
+                        onPageFinished = { url -> onPageFinished(currentTabId, url) },
+                        onNavStateChanged = { back, fwd -> onNavStateChanged(currentTabId, back, fwd) },
+                        onModelBusyChanged = { busy -> onModelBusyChanged(currentTabId, busy) }
                     )
                 }
 
@@ -95,19 +144,19 @@ fun BrowserScreen(
                     horizontalAlignment = Alignment.End
                 ) {
                     key(currentTabId) {
-                        ModelNamePopup(modelName = viewModel.modelName)
+                        ModelNamePopup(modelName = state.modelName)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     AdBlockToggleButton(
-                        blockingEnabled = viewModel.blockingEnabled,
-                        enabled = !viewModel.isLoading && !viewModel.isModelBusy,
-                        onToggle = viewModel::toggleBlocking
+                        blockingEnabled = state.blockingEnabled,
+                        enabled = !state.isLoading && !state.isModelBusy,
+                        onToggle = onToggleBlocking
                     )
                 }
 
-                // Snackbar host for notices
-                SnackbarHost(
-                    hostState = snackbarHostState,
+                // Toast notification for toggle / tab-limit notices
+                ToastMessage(
+                    message = activeToast,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 88.dp)
@@ -115,7 +164,7 @@ fun BrowserScreen(
             }
 
             // Loading indicator
-            if (viewModel.isLoading) {
+            if (state.isLoading) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(3.dp)
                 )
@@ -123,33 +172,30 @@ fun BrowserScreen(
 
             // Toolbar (bottom)
             BrowserToolbar(
-                inputText = viewModel.inputText,
-                canGoBack = viewModel.canGoBack,
-                canGoForward = viewModel.canGoForward,
-                tabCount = viewModel.tabCount,
-                onInputChange = viewModel::onInputChange,
-                onNavigate = viewModel::onUrlSubmit,
-                onBack = viewModel::onBack,
-                onForward = viewModel::onForward,
-                onRefresh = viewModel::onRefresh,
-                onHistory = viewModel::openHistory,
-                onTabSwitcher = viewModel::openTabSwitcher,
-                modelName = viewModel.modelName
+                inputText = state.inputText,
+                canGoBack = state.canGoBack,
+                canGoForward = state.canGoForward,
+                tabCount = state.tabCount,
+                onInputChange = onInputChange,
+                onNavigate = onNavigate,
+                onBack = onBack,
+                onForward = onForward,
+                onRefresh = onRefresh,
+                onHistory = onOpenHistory,
+                onTabSwitcher = onOpenTabSwitcher,
+                modelName = state.modelName
             )
         }
 
         // Tab switcher overlay
-        if (viewModel.tabSwitcherVisible) {
+        if (state.tabSwitcherVisible) {
             TabSwitcherView(
-                tabs = viewModel.tabs,
-                activeTabId = viewModel.activeTabId,
-                onTabSelected = { id ->
-                    viewModel.closeTabSwitcher()
-                    viewModel.activateTab(id)
-                },
-                onTabClose = viewModel::closeTab,
-                onNewTab = viewModel::createTab,
-                onClose = viewModel::closeTabSwitcher,
+                tabs = state.tabs,
+                activeTabId = state.activeTabId,
+                onTabSelected = onTabSelected,
+                onTabClose = onTabClose,
+                onNewTab = { onNewTab() },
+                onClose = onCloseTabSwitcher,
                 modifier = Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -157,13 +203,13 @@ fun BrowserScreen(
         }
 
         // History overlay
-        if (viewModel.historyVisible) {
+        if (state.historyVisible) {
             HistoryView(
-                entries = viewModel.historyEntries,
-                onEntryClick = viewModel::onRevisit,
-                onEntryDelete = viewModel::onDeleteHistory,
-                onClearAll = viewModel::onClearHistory,
-                onClose = viewModel::closeHistory,
+                entries = state.historyEntries,
+                onEntryClick = onRevisit,
+                onEntryDelete = onDeleteHistory,
+                onClearAll = onClearHistory,
+                onClose = onCloseHistory,
                 modifier = Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -171,7 +217,7 @@ fun BrowserScreen(
         }
 
         // Model Inference Spinner
-        if (viewModel.isModelBusy) {
+        if (state.isModelBusy) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.3f)
@@ -188,6 +234,37 @@ fun BrowserScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Lightweight toast-style notification — a compact, centered pill that fades in/out.
+ * Replaces the full-width Material 3 Snackbar for less visual clutter.
+ */
+@Composable
+private fun ToastMessage(
+    message: String?,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = message != null,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.inverseSurface,
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+            shadowElevation = 4.dp
+        ) {
+            Text(
+                text = message.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+            )
         }
     }
 }
@@ -480,21 +557,17 @@ private fun AdBlockToggleButtonDisabledPreview() {
 
 @Preview
 @Composable
-private fun ToggleNoticeSnackbarOnPreview() {
+private fun ToggleNoticeToastOnPreview() {
     MaterialTheme {
-        Snackbar {
-            Text("Blocking : On")
-        }
+        ToastMessage(message = "Blocking : On")
     }
 }
 
 @Preview
 @Composable
-private fun ToggleNoticeSnackbarOffPreview() {
+private fun ToggleNoticeToastOffPreview() {
     MaterialTheme {
-        Snackbar {
-            Text("Blocking : Off")
-        }
+        ToastMessage(message = "Blocking : Off")
     }
 }
 

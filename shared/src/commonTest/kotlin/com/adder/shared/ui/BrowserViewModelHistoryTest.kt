@@ -25,15 +25,15 @@ class BrowserViewModelHistoryTest {
     @Test
     fun `closing history leaves the current page untouched`() {
         val fixture = Fixture()
-        val urlBefore = fixture.viewModel.url
+        val urlBefore = fixture.viewModel.uiState.value.url
 
         fixture.viewModel.openHistory()
-        assertTrue(fixture.viewModel.historyVisible)
+        assertTrue(fixture.viewModel.uiState.value.historyVisible)
 
         fixture.viewModel.closeHistory()
 
-        assertFalse(fixture.viewModel.historyVisible)
-        assertEquals(urlBefore, fixture.viewModel.url)
+        assertFalse(fixture.viewModel.uiState.value.historyVisible)
+        assertEquals(urlBefore, fixture.viewModel.uiState.value.url)
         // No reload and no navigation — the loaded page is exactly as it was.
         assertTrue(fixture.webView.loadedUrls.isEmpty())
         assertEquals(0, fixture.webView.reloadCount)
@@ -45,7 +45,7 @@ class BrowserViewModelHistoryTest {
         fixture.clock.now = 1_000L
         fixture.store.record("https://kept.example.com/", "Kept")
         fixture.viewModel.openHistory()
-        val entry = fixture.viewModel.historyEntries.single()
+        val entry = fixture.viewModel.uiState.value.historyEntries.single()
 
         fixture.viewModel.onRevisit(entry)
 
@@ -60,8 +60,8 @@ class BrowserViewModelHistoryTest {
 
         fixture.viewModel.onPageFinished("https://example.com/")
 
-        assertEquals(1, fixture.viewModel.historyEntries.size)
-        val entry = fixture.viewModel.historyEntries.single()
+        assertEquals(1, fixture.viewModel.uiState.value.historyEntries.size)
+        val entry = fixture.viewModel.uiState.value.historyEntries.single()
         assertEquals("https://example.com/", entry.url)
         assertEquals("Example Domain", entry.displayLabel)
         assertEquals(5_000L, entry.visitTimestamp)
@@ -75,7 +75,7 @@ class BrowserViewModelHistoryTest {
 
         fixture.viewModel.onPageFinished("https://example.com/")
 
-        assertEquals("https://example.com/", fixture.viewModel.historyEntries.single().displayLabel)
+        assertEquals("https://example.com/", fixture.viewModel.uiState.value.historyEntries.single().displayLabel)
     }
 
     @Test
@@ -84,7 +84,7 @@ class BrowserViewModelHistoryTest {
 
         fixture.viewModel.onPageFinished("about:blank")
 
-        assertTrue(fixture.viewModel.historyEntries.isEmpty())
+        assertTrue(fixture.viewModel.uiState.value.historyEntries.isEmpty())
         assertTrue(fixture.store.entries().isEmpty())
     }
 
@@ -96,14 +96,14 @@ class BrowserViewModelHistoryTest {
         fixture.clock.now = 2_000L
         fixture.store.record("https://two.example.com/", "Two")
         fixture.viewModel.openHistory()
-        assertEquals(2, fixture.viewModel.historyEntries.size)
+        assertEquals(2, fixture.viewModel.uiState.value.historyEntries.size)
 
-        val target = fixture.viewModel.historyEntries.single { it.url == "https://two.example.com/" }
+        val target = fixture.viewModel.uiState.value.historyEntries.single { it.url == "https://two.example.com/" }
         fixture.viewModel.onDeleteHistory(target)
 
         assertEquals(
             listOf("https://one.example.com/"),
-            fixture.viewModel.historyEntries.map { it.url }
+            fixture.viewModel.uiState.value.historyEntries.map { it.url }
         )
     }
 
@@ -116,7 +116,7 @@ class BrowserViewModelHistoryTest {
 
         fixture.viewModel.onClearHistory()
 
-        assertTrue(fixture.viewModel.historyEntries.isEmpty())
+        assertTrue(fixture.viewModel.uiState.value.historyEntries.isEmpty())
     }
 
     @Test
@@ -129,7 +129,7 @@ class BrowserViewModelHistoryTest {
 
         assertEquals(
             listOf("https://previous.example.com/"),
-            viewModel.historyEntries.map { it.url }
+            viewModel.uiState.value.historyEntries.map { it.url }
         )
     }
 
@@ -144,8 +144,8 @@ class BrowserViewModelHistoryTest {
         fixture.clock.now = 2_000L
         fixture.viewModel.onPageFinished("https://example.com/")
 
-        assertEquals(1, fixture.viewModel.historyEntries.size)
-        assertEquals(2_000L, fixture.viewModel.historyEntries.single().visitTimestamp)
+        assertEquals(1, fixture.viewModel.uiState.value.historyEntries.size)
+        assertEquals(2_000L, fixture.viewModel.uiState.value.historyEntries.single().visitTimestamp)
         assertEquals(1, fixture.webView.reloadCount)
     }
 }

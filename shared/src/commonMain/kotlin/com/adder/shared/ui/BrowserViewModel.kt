@@ -1,8 +1,5 @@
 package com.adder.shared.ui
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.adder.shared.UrlUtils
 import com.adder.shared.detection.currentModelName
@@ -11,6 +8,37 @@ import com.adder.shared.engine.TabManager
 import com.adder.shared.engine.platformPersistentStore
 import com.adder.shared.model.HistoryEntry
 import com.adder.shared.model.Tab
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+/**
+ * Consolidated UI state for [BrowserScreen]. A single snapshot of everything
+ * the screen needs to render, emitted via [BrowserViewModel.uiState] StateFlow.
+ */
+data class BrowserScreenUiState(
+    val url: String = INITIAL_URL,
+    val inputText: String = INITIAL_URL,
+    val canGoBack: Boolean = false,
+    val canGoForward: Boolean = false,
+    val isLoading: Boolean = false,
+    val isModelBusy: Boolean = false,
+    val blockingEnabled: Boolean = true,
+    val tabs: List<Tab> = emptyList(),
+    val activeTabId: String = "",
+    val tabCount: Int = 0,
+    val tabSwitcherVisible: Boolean = false,
+    val historyVisible: Boolean = false,
+    val historyEntries: List<HistoryEntry> = emptyList(),
+    val modelName: String = "",
+    val toggleNotice: String? = null,
+    val snackbarNotice: String? = null
+) {
+    companion object {
+        const val INITIAL_URL = "https://www.google.com"
+    }
+}
 
 /**
  * Owns all observable UI state for the browser screen and exposes the intents
@@ -25,20 +53,29 @@ class BrowserViewModel(
 ) : ViewModel() {
 
     // -------------------------------------------------------------------------
-    // Per-tab transient UI state
+    // StateFlow: single source of truth for BrowserScreen
+    // -------------------------------------------------------------------------
+
+    private val _uiState = MutableStateFlow(BrowserScreenUiState())
+
+    /** Observable UI state consumed by [BrowserScreen]. */
+    val uiState: StateFlow<BrowserScreenUiState> = _uiState.asStateFlow()
+
+    // -------------------------------------------------------------------------
+    // Per-tab transient UI state (internal bookkeeping, not directly observed)
     // -------------------------------------------------------------------------
 
     /**
      * Transient per-tab state not persisted across sessions (loading, nav controls,
      * model busy). Separate from the persisted [Tab] model.
      */
-    class TabUiState {
-        var isLoading by mutableStateOf(false)
-        var isModelBusy by mutableStateOf(false)
-        var canGoBack by mutableStateOf(false)
-        var canGoForward by mutableStateOf(false)
-        var inputText by mutableStateOf("")
-    }
+    private class TabUiState(
+        var isLoading: Boolean = false,
+        var isModelBusy: Boolean = false,
+        var canGoBack: Boolean = false,
+        var canGoForward: Boolean = false,
+        var inputText: String = ""
+    )
 
     private val tabUiStates = mutableMapOf<String, TabUiState>()
     private val tabControllers = mutableMapOf<String, WebViewController>()
@@ -46,7 +83,7 @@ class BrowserViewModel(
     private fun getOrCreateUiState(tabId: String): TabUiState {
         return tabUiStates.getOrPut(tabId) {
             val tab = tabManager.tabs.firstOrNull { it.id == tabId }
-            TabUiState().also { it.inputText = tab?.url ?: INITIAL_URL }
+            TabUiState(inputText = tab?.url ?: INITIAL_URL)
         }
     }
 
@@ -61,93 +98,26 @@ class BrowserViewModel(
     }
 
     // -------------------------------------------------------------------------
-    // Active tab derived state (what BrowserScreen observes)
+    // Internal mutable fields (drive the StateFlow via emitState())
     // -------------------------------------------------------------------------
 
-    private val activeUiState: TabUiState
-        get() = getOrCreateUiState(tabManager.activeTabId)
-
-    /** Current URL of the active tab (from TabManager's persisted state). */
-    val url: String
-        get() = tabManager.activeTab.url
-
-    /** Text shown in the address bar (may differ from [url] while user is typing). */
-    var inputText: String
-        get() = activeUiState.inputText
-        private set(value) { activeUiState.inputText = value }
-
-    val canGoBack: Boolean
-        get() = activeUiState.canGoBack
-
-    val canGoForward: Boolean
-        get() = activeUiState.canGoForward
-
-    val isLoading: Boolean
-        get() = activeUiState.isLoading
-
-    val isModelBusy: Boolean
-        get() = activeUiState.isModelBusy
+    private var blockingEnabled: Boolean = true
+    private var tabSwitcherVisible: Boolean = false
+    private var historyVisible: Boolean = false
+    private var historyEntries: List<HistoryEntry> = emptyList()
+    private var modelName: String = currentModelName()
+    private var toggleNotice: String? = null
+    private var snackbarNotice: String? = null
 
     /** The active tab's WebViewController. */
     val webViewController: WebViewController
         get() = getOrCreateController(tabManager.activeTabId)
 
-    // -------------------------------------------------------------------------
-    // Tab collection state
-    // -------------------------------------------------------------------------
-
-    /** Ordered list of all tabs. */
-    var tabs by mutableStateOf(tabManager.tabs)
-        private set
-
-    /** ID of the currently active tab. */
-    var activeTabId by mutableStateOf(tabManager.activeTabId)
-        private set
-
-    /** Number of open tabs. */
-    val tabCount: Int
-        get() = tabs.size
-
-    /** Whether the tab switcher overlay is visible. */
-    var tabSwitcherVisible by mutableStateOf(false)
-        private set
-
-    // -------------------------------------------------------------------------
-    // Blocking toggle
-    // -------------------------------------------------------------------------
-
-    var blockingEnabled by mutableStateOf(true)
-        private set
-
-    var toggleNotice by mutableStateOf<String?>(null)
-        private set
-
-    // -------------------------------------------------------------------------
-    // History
-    // -------------------------------------------------------------------------
-
-    var modelName by mutableStateOf(currentModelName())
-        private set
-
-    var historyVisible by mutableStateOf(false)
-        private set
-
-    var historyEntries by mutableStateOf<List<HistoryEntry>>(emptyList())
-        private set
-
-    // -------------------------------------------------------------------------
-    // Snackbar notices (shared slot for toggle + tab limit)
-    // -------------------------------------------------------------------------
-
-    var snackbarNotice by mutableStateOf<String?>(null)
-        private set
-
     init {
         historyEntries = historyStore.entries()
-        // Initialize UI state for the active tab.
         getOrCreateUiState(tabManager.activeTabId)
         getOrCreateController(tabManager.activeTabId)
-        syncTabState()
+        emitState()
     }
 
     // -------------------------------------------------------------------------
@@ -162,18 +132,18 @@ class BrowserViewModel(
         val tab = tabManager.createTab(url)
         if (tab == null) {
             snackbarNotice = NOTICE_TAB_LIMIT
+            emitState()
             return
         }
-        syncTabState()
+        emitState()
     }
 
     /** Closes the tab with [id]. */
     fun closeTab(id: String) {
         tabManager.closeTab(id)
-        // Clean up transient state for the closed tab.
         tabUiStates.remove(id)
         tabControllers.remove(id)
-        syncTabState()
+        emitState()
     }
 
     /**
@@ -183,7 +153,7 @@ class BrowserViewModel(
     fun activateTab(id: String) {
         if (tabManager.tabs.none { it.id == id }) return
         tabManager.activateTab(id)
-        syncTabState()
+        emitState()
 
         // Lazy reconciliation: reload if blocking mode is stale.
         val tab = tabManager.activeTab
@@ -194,10 +164,12 @@ class BrowserViewModel(
 
     fun openTabSwitcher() {
         tabSwitcherVisible = true
+        emitState()
     }
 
     fun closeTabSwitcher() {
         tabSwitcherVisible = false
+        emitState()
     }
 
     // -------------------------------------------------------------------------
@@ -205,13 +177,16 @@ class BrowserViewModel(
     // -------------------------------------------------------------------------
 
     fun onInputChange(text: String) {
-        activeUiState.inputText = text
+        getOrCreateUiState(tabManager.activeTabId).inputText = text
+        emitState()
     }
 
     fun onUrlSubmit() {
-        val normalized = UrlUtils.normalizeUrl(activeUiState.inputText)
-        activeUiState.inputText = normalized
+        val activeState = getOrCreateUiState(tabManager.activeTabId)
+        val normalized = UrlUtils.normalizeUrl(activeState.inputText)
+        activeState.inputText = normalized
         webViewController.loadUrl(normalized)
+        emitState()
     }
 
     fun onBack() = webViewController.goBack()
@@ -224,19 +199,23 @@ class BrowserViewModel(
         blockingEnabled = !blockingEnabled
         toggleNotice = if (blockingEnabled) NOTICE_BLOCKING_ON else NOTICE_BLOCKING_OFF
         webViewController.reload()
+        emitState()
     }
 
     fun onToggleNoticeShown() {
         toggleNotice = null
+        emitState()
     }
 
     fun onSnackbarNoticeShown() {
         snackbarNotice = null
+        emitState()
     }
 
     /** Re-reads the platform model name (may have changed after LLM availability check). */
     fun refreshModelName() {
         modelName = currentModelName()
+        emitState()
     }
 
     // -------------------------------------------------------------------------
@@ -246,26 +225,32 @@ class BrowserViewModel(
     fun openHistory() {
         historyEntries = historyStore.entries()
         historyVisible = true
+        emitState()
     }
 
     fun closeHistory() {
         historyVisible = false
+        emitState()
     }
 
     fun onRevisit(entry: HistoryEntry) {
         historyVisible = false
-        activeUiState.inputText = entry.url
+        val activeState = getOrCreateUiState(tabManager.activeTabId)
+        activeState.inputText = entry.url
         webViewController.loadUrl(entry.url)
+        emitState()
     }
 
     fun onDeleteHistory(entry: HistoryEntry) {
         historyStore.delete(entry.url)
         historyEntries = historyStore.entries()
+        emitState()
     }
 
     fun onClearHistory() {
         historyStore.clear()
         historyEntries = historyStore.entries()
+        emitState()
     }
 
     // -------------------------------------------------------------------------
@@ -277,6 +262,7 @@ class BrowserViewModel(
         state.isLoading = true
         state.isModelBusy = false
         state.inputText = newUrl
+        emitState()
     }
 
     fun onPageFinished(tabId: String, newUrl: String) {
@@ -287,27 +273,30 @@ class BrowserViewModel(
         // Update persisted tab metadata.
         val title = getOrCreateController(tabId).currentTitle().orEmpty()
         tabManager.updateTab(tabId, newUrl, title, blockingEnabled)
-        syncTabState()
 
         // Refresh model name in case LLM availability was resolved during this page load.
-        refreshModelName()
+        modelName = currentModelName()
 
         // Record in unified history regardless of which tab finished.
         if (HistoryStore.isRecordable(newUrl)) {
             historyStore.record(newUrl, title)
             historyEntries = historyStore.entries()
         }
+
+        emitState()
     }
 
     fun onNavStateChanged(tabId: String, canGoBack: Boolean, canGoForward: Boolean) {
         val state = getOrCreateUiState(tabId)
         state.canGoBack = canGoBack
         state.canGoForward = canGoForward
+        emitState()
     }
 
     fun onModelBusyChanged(tabId: String, busy: Boolean) {
         val state = getOrCreateUiState(tabId)
         state.isModelBusy = busy
+        emitState()
     }
 
     // -------------------------------------------------------------------------
@@ -320,10 +309,33 @@ class BrowserViewModel(
     // Private helpers
     // -------------------------------------------------------------------------
 
-    /** Synchronizes the Compose-observable [tabs] and [activeTabId] from TabManager. */
-    private fun syncTabState() {
-        tabs = tabManager.tabs
-        activeTabId = tabManager.activeTabId
+    /**
+     * Snapshots the current internal state into a new [BrowserScreenUiState]
+     * and pushes it to [_uiState].
+     */
+    private fun emitState() {
+        val activeTabId = tabManager.activeTabId
+        val activeState = getOrCreateUiState(activeTabId)
+        _uiState.update {
+            BrowserScreenUiState(
+                url = tabManager.activeTab.url,
+                inputText = activeState.inputText,
+                canGoBack = activeState.canGoBack,
+                canGoForward = activeState.canGoForward,
+                isLoading = activeState.isLoading,
+                isModelBusy = activeState.isModelBusy,
+                blockingEnabled = blockingEnabled,
+                tabs = tabManager.tabs,
+                activeTabId = activeTabId,
+                tabCount = tabManager.tabs.size,
+                tabSwitcherVisible = tabSwitcherVisible,
+                historyVisible = historyVisible,
+                historyEntries = historyEntries,
+                modelName = modelName,
+                toggleNotice = toggleNotice,
+                snackbarNotice = snackbarNotice
+            )
+        }
     }
 
     private companion object {
