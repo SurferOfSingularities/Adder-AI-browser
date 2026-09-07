@@ -17,12 +17,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -408,10 +411,32 @@ private fun BrowserToolbar(
             }
 
             // URL input
+            var fieldValue by remember { mutableStateOf(TextFieldValue(inputText)) }
+            // Keep the local field in sync when inputText changes externally (e.g. navigation),
+            // preserving the cursor/selection while the user is editing.
+            if (fieldValue.text != inputText) {
+                fieldValue = fieldValue.copy(
+                    text = inputText,
+                    selection = TextRange(inputText.length)
+                )
+            }
             OutlinedTextField(
-                value = inputText,
-                onValueChange = onInputChange,
-                modifier = Modifier.weight(1f).height(48.dp),
+                value = fieldValue,
+                onValueChange = {
+                    fieldValue = it
+                    if (it.text != inputText) onInputChange(it.text)
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused) {
+                            // Select all text when the address bar gains focus.
+                            fieldValue = fieldValue.copy(
+                                selection = TextRange(0, fieldValue.text.length)
+                            )
+                        }
+                    },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodySmall,
                 keyboardOptions = KeyboardOptions(
