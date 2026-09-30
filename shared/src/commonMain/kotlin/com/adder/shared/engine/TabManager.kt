@@ -194,7 +194,7 @@ class TabManager(
         if (store == null) return null
 
         val session = runCatching {
-            val raw = store.getString(TabSession.STORAGE_KEY) ?: return null
+            val raw = store?.getString(TabSession.STORAGE_KEY) ?: return null
             json.decodeFromString<TabSession>(raw)
         }.getOrNull() ?: return null
 
@@ -221,7 +221,7 @@ class TabManager(
         if (store == null) return
         runCatching {
             val session = TabSession(tabs = tabs, activeTabId = activeTabId)
-            store.putString(TabSession.STORAGE_KEY, json.encodeToString(TabSession.serializer(), session))
+            store?.putString(TabSession.STORAGE_KEY, json.encodeToString(TabSession.serializer(), session))
         }
     }
 
