@@ -410,33 +410,23 @@ private fun BrowserToolbar(
                 )
             }
 
-            // URL input
-            var fieldValue by remember { mutableStateOf(TextFieldValue(inputText)) }
-            // Keep the local field in sync when inputText changes externally (e.g. navigation),
-            // preserving the cursor/selection while the user is editing.
-            if (fieldValue.text != inputText) {
-                fieldValue = fieldValue.copy(
-                    text = inputText,
-                    selection = TextRange(inputText.length)
-                )
-            }
+            // URL input.
+            // `inputText` (from the ViewModel) is the source of truth for the text; the
+            // selection is derived from focus so the whole URL is highlighted the moment
+            // the address bar gains focus, and stays highlighted until the user types.
+            var selectAll by remember { mutableStateOf(false) }
+            val selection = if (selectAll) TextRange(0, inputText.length) else TextRange(inputText.length)
             OutlinedTextField(
-                value = fieldValue,
+                value = TextFieldValue(text = inputText, selection = selection),
                 onValueChange = {
-                    fieldValue = it
+                    // First edit after focus clears the select-all highlight.
+                    selectAll = false
                     if (it.text != inputText) onInputChange(it.text)
                 },
                 modifier = Modifier
                     .weight(1f)
                     .height(48.dp)
-                    .onFocusChanged { focusState ->
-                        if (focusState.isFocused) {
-                            // Select all text when the address bar gains focus.
-                            fieldValue = fieldValue.copy(
-                                selection = TextRange(0, fieldValue.text.length)
-                            )
-                        }
-                    },
+                    .onFocusChanged { selectAll = it.isFocused },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodySmall,
                 keyboardOptions = KeyboardOptions(
