@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -366,11 +368,17 @@ private fun BrowserToolbar(
     modelName: String
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
+    // Highlight selected address-bar text in green.
+    val greenSelectionColors = TextSelectionColors(
+        handleColor = BlockingOnContainer,
+        backgroundColor = BlockingOnContainer.copy(alpha = 0.4f)
+    )
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = 2.dp
     ) {
+        CompositionLocalProvider(LocalTextSelectionColors provides greenSelectionColors) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -448,6 +456,7 @@ private fun BrowserToolbar(
                 count = tabCount,
                 onClick = onTabSwitcher
             )
+        }
         }
     }
 }
