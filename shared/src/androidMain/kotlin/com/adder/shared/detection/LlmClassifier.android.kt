@@ -25,7 +25,7 @@ actual class LlmClassifier actual constructor() {
     private var available: Boolean? = null
 
     actual suspend fun isAvailable(): Boolean {
-        if (available != null) return available!!
+        if (available != null) return available ?: false
 
         return withContext(Dispatchers.Main) {
             try {
